@@ -14,6 +14,7 @@ function doGet(e) {
   var t = HtmlService.createTemplateFromFile(pagina);
   t.marca = Configuracion.marcaPublica();
   t.pagina = prm.p || 'publico';
+  t.url = ScriptApp.getService().getUrl();
   return t.evaluate()
     .setTitle(t.marca.nombre_comercial)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')

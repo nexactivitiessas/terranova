@@ -1,0 +1,82 @@
+<script>
+/* Comun.html — utilidades compartidas del frontend. Toda salida dinámica pasa por esc() (protección XSS). */
+(function () {
+  var TEMA_KEY = 'pfi_tema';
+  function aplicarTema(t) {
+    var oscuro = t === 'oscuro' || (!t && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', !!oscuro);
+  }
+  try { aplicarTema(localStorage.getItem(TEMA_KEY)); } catch (e) { aplicarTema(null); }
+  window.alternarTema = function () {
+    var oscuro = !document.documentElement.classList.contains('dark');
+    try { localStorage.setItem(TEMA_KEY, oscuro ? 'oscuro' : 'claro'); } catch (e) {}
+    aplicarTema(oscuro ? 'oscuro' : 'claro');
+  };
+
+  window.esc = function (v) {
+    return String(v === null || v === undefined ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  };
+  /** Solo permite enlaces https (evita javascript: y data:). */
+  window.urlSegura = function (u) { return /^https:\/\//i.test(String(u || '')) ? String(u) : ''; };
+
+  var fmtMoneda = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 2 });
+  window.moneda = function (n) { return n === '' || n === null || n === undefined ? '' : fmtMoneda.format(Number(n) || 0); };
+  window.fecha = function (v) {
+    if (!v) return '';
+    var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})(T.*)?$/);
+    if (!m) return String(v);
+    if (!m[4]) return m[3] + '/' + m[2] + '/' + m[1];
+    var d = new Date(v);
+    return d.toLocaleDateString('es-AR', { timeZone: 'America/Argentina/Cordoba' }) + ' ' +
+      d.toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Cordoba', hour: '2-digit', minute: '2-digit' });
+  };
+  window.idemKey = function () { return 'UI-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); };
+
+  /** Llama al backend. Devuelve una promesa con los datos o rechaza con {codigo, mensaje}. */
+  window.llamar = function (accion, datos, opciones) {
+    opciones = opciones || {};
+    return new Promise(function (ok, mal) {
+      if (!window.google || !google.script || !google.script.run) {
+        mal({ codigo: 'SIN_BACKEND', mensaje: 'Esta página debe abrirse desde la aplicación de Google Apps Script.' });
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(function (r) {
+          if (r && r.ok) ok(r.datos);
+          else {
+            var e = (r && r.error) || { codigo: 'DESCONOCIDO', mensaje: 'Error desconocido' };
+            if (e.codigo === 'SESION' && window.alExpirarSesion) window.alExpirarSesion();
+            mal(e);
+          }
+        })
+        .withFailureHandler(function (e) { mal({ codigo: 'RED', mensaje: 'No se pudo contactar al servidor: ' + (e && e.message ? e.message : e) }); })
+        .api({ accion: accion, token: opciones.sinToken ? '' : (window.SESION && SESION.token) || '', datos: datos || {}, idempotencia: opciones.idempotencia || '' });
+    });
+  };
+
+  window.aviso = function (mensaje, tipo) {
+    var c = document.getElementById('avisos');
+    if (!c) { alert(mensaje); return; }
+    var el = document.createElement('div');
+    var colores = { ok: 'bg-emerald-600', error: 'bg-red-600', info: 'bg-slate-800' };
+    el.className = 'text-white text-sm px-4 py-3 rounded-lg shadow-lg max-w-sm ' + (colores[tipo || 'info'] || colores.info);
+    el.setAttribute('role', 'status');
+    el.textContent = mensaje;
+    c.appendChild(el);
+    setTimeout(function () { el.remove(); }, tipo === 'error' ? 8000 : 4000);
+  };
+
+  /** Serializa un formulario a objeto (checkbox → boolean). */
+  window.datosForm = function (form) {
+    var o = {};
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name || el.disabled) return;
+      if (el.type === 'checkbox') o[el.name] = el.checked;
+      else if (el.type === 'number') o[el.name] = el.value === '' ? '' : Number(el.value);
+      else o[el.name] = el.value;
+    });
+    return o;
+  };
+})();
+</script>

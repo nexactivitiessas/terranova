@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  input, select, textarea { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-marca dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100; }
+  input[type=checkbox] { @apply w-4 h-4 p-0; }
+  input[type=color] { @apply h-10 p-1; }
+  a, button { @apply transition; }
+  button:disabled { @apply opacity-50 cursor-not-allowed; }
+  :focus-visible { outline: 2px solid var(--c2); outline-offset: 2px; }
+}
+
+@layer components {
+  .tarjeta { @apply rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800; }
+  .titulo-tarjeta { @apply font-serif text-xl font-bold mb-2 text-marca dark:text-acento; }
+  .titulo-seccion { @apply font-serif text-3xl md:text-4xl font-bold; }
+  .subtitulo-seccion { @apply mt-3 max-w-3xl text-slate-600 dark:text-slate-300; }
+  .paso { @apply relative rounded-2xl bg-stone-50 p-5 text-sm space-y-2 dark:bg-slate-800; }
+  .numero-paso { @apply grid h-8 w-8 place-items-center rounded-full bg-acento font-bold text-slate-900; }
+  .formulario { @apply rounded-2xl bg-white p-6 shadow-lg space-y-4 dark:bg-slate-900; }
+  .formulario label, .campo { @apply flex flex-col gap-1 text-sm font-medium; }
+  .boton-primario { @apply inline-flex items-center justify-center rounded-lg bg-marca px-4 py-2 text-sm font-semibold text-white hover:opacity-90; }
+  .boton-secundario { @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700; }
+  .tabla { @apply w-full text-sm; }
+  .tabla th { @apply whitespace-nowrap border-b border-slate-200 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800; }
+  .tabla td { @apply border-b border-slate-100 px-3 py-2 align-top dark:border-slate-800; }
+  .barra { @apply h-2 w-full min-w-[4rem] overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700; }
+  .barra > div { @apply h-full rounded-full bg-marca; }
+  .barra > div.bg-acento { background: var(--c2); }
+  .barra > div.gris { background: #64748b; }
+  .faq { @apply rounded-xl bg-white p-4 ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800; }
+  .faq summary { @apply cursor-pointer font-semibold; }
+  .faq p { @apply mt-3 text-sm text-slate-600 dark:text-slate-300; }
+  .item-menu { @apply mx-2 block rounded-lg px-3 py-2 text-white/80 hover:bg-white/10 hover:text-white; }
+  .item-menu.activo { @apply bg-white/15 text-white font-semibold; }
+  .pestana { @apply whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm text-slate-500 hover:text-slate-800 dark:hover:text-slate-200; }
+  .pestana.activa { @apply border-marca text-slate-900 font-semibold dark:text-white; }
+  .nota { @apply rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200; }
+  .animar { animation: aparecer .7s ease-out both; }
+}
+@keyframes aparecer { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .animar { animation: none; } }
+@media print { aside, header, #avisos, button { display: none !important; } #panel section { position: static; max-width: none; box-shadow: none; } }

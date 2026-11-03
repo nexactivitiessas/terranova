@@ -6,6 +6,7 @@ var CONFIG_DEFECTO = [
   { clave: 'nombre_comercial', valor: 'Plataforma Fiduciaria Integral', publica: true, descripcion: 'Nombre visible de la empresa' },
   { clave: 'eslogan', valor: 'Desarrollos inmobiliarios mediante fideicomisos, con transparencia y trazabilidad.', publica: true, descripcion: 'Frase principal de la portada' },
   { clave: 'logo_url', valor: '', publica: true, descripcion: 'URL pública del logotipo (Drive compartido o imagen)' },
+  { clave: 'imagen_portada_url', valor: '', publica: true, descripcion: 'Fotografía o render de portada (URL pública https)' },
   { clave: 'color_primario', valor: '#0f3d3e', publica: true, descripcion: 'Color principal (hex)' },
   { clave: 'color_secundario', valor: '#c8a96a', publica: true, descripcion: 'Color de acento (hex)' },
   { clave: 'whatsapp_publico', valor: '', publica: true, descripcion: 'Número de WhatsApp en formato internacional, sin +' },

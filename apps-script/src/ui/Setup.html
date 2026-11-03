@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex">
+  <style>:root{--c1:<?= marca.color_primario ?>;--c2:<?= marca.color_secundario ?>}</style>
+  <?!= include_('ui/Estilos') ?>
+</head>
+<body class="min-h-screen bg-stone-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 grid place-items-center p-4 font-sans">
+  <div id="avisos" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+  <main class="w-full max-w-md tarjeta">
+    <h1 class="font-serif text-2xl font-bold">Configuración inicial</h1>
+    <p class="text-sm text-slate-500 mt-1">Creación de la cuenta SUPERADMIN. Solo funciona una vez y requiere el código de instalación que aparece en el registro de ejecución de <code>instalar()</code>.</p>
+    <div id="estado" class="mt-4 text-sm"></div>
+    <form id="formSetup" class="formulario p-0 shadow-none mt-4 hidden" autocomplete="off">
+      <label>Código de instalación<input name="codigo" required placeholder="XXXX-XXXX-XXXX" autocomplete="one-time-code" class="uppercase"></label>
+      <label>Nombre<input name="nombre" required maxlength="120"></label>
+      <label>Email<input name="email" type="email" required autocomplete="username"></label>
+      <label>Contraseña nueva<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+      <label>Repetir contraseña<input name="password2" type="password" required minlength="12" autocomplete="new-password"></label>
+      <p class="text-xs text-slate-500">Mínimo 12 caracteres con mayúscula, minúscula, número y símbolo. Use una contraseña nueva, que no haya compartido en conversaciones ni documentos.</p>
+      <button class="boton-primario">Crear SUPERADMIN</button>
+    </form>
+  </main>
+  <?!= include_('ui/Comun') ?>
+  <script>
+    var est = document.getElementById('estado'), form = document.getElementById('formSetup');
+    llamar('setup.estado', {}, { sinToken: true }).then(function (r) {
+      if (!r.instalado) est.innerHTML = '<p class="text-red-600">La plataforma no está instalada. Ejecute <code>instalar()</code> desde el editor de Apps Script.</p>';
+      else if (!r.requiereSuperadmin) est.innerHTML = '<p>La configuración inicial ya fue completada. <a class="text-marca underline" href="<?= url ?>?p=app">Ingresar</a></p>';
+      else form.classList.remove('hidden');
+    }).catch(function (e) { est.textContent = e.mensaje; });
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var d = datosForm(form);
+      if (d.password !== d.password2) return aviso('Las contraseñas no coinciden.', 'error');
+      delete d.password2;
+      llamar('setup.crearSuperadmin', d, { sinToken: true }).then(function () {
+        form.reset(); form.classList.add('hidden');
+        est.innerHTML = '<p class="text-emerald-700 font-semibold">Cuenta creada.</p><p>Ya puede <a class="text-marca underline" href="<?= url ?>?p=app">ingresar</a>.</p>';
+      }).catch(function (e) { aviso(e.mensaje, 'error'); });
+    });
+  </script>
+</body>
+</html>

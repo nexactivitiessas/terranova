@@ -7,3 +7,5 @@ secretos/
 salida/
 tools/fabrica/salida/
 *.log
+apps-script/.clasp.json
+entrega/

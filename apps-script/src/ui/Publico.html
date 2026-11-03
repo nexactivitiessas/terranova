@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="description" content="<?= marca.eslogan ?>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap" rel="stylesheet">
+  <style>:root{--c1:<?= marca.color_primario ?>;--c2:<?= marca.color_secundario ?>}</style>
+  <?!= include_('ui/Estilos') ?>
+</head>
+<body class="bg-stone-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased">
+  <div id="avisos" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2"></div>
+
+  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <nav class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <a href="#inicio" class="flex items-center gap-3 min-w-0">
+        <? if (marca.logo_url && /^https:\/\//.test(marca.logo_url)) { ?><img src="<?= marca.logo_url ?>" alt="" class="h-9 w-auto"><? } else { ?>
+        <span class="h-9 w-9 rounded-lg bg-marca text-white grid place-items-center font-serif font-bold">F</span><? } ?>
+        <span class="font-serif font-bold text-lg truncate"><?= marca.nombre_comercial ?></span>
+      </a>
+      <button id="btnMenu" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Abrir menú" aria-expanded="false">☰</button>
+      <ul id="menuPublico" class="hidden lg:flex items-center gap-5 text-sm font-medium whitespace-nowrap">
+        <li><a class="hover:text-marca" href="#como">Cómo trabajamos</a></li>
+        <li><a class="hover:text-marca" href="#proyectos">Proyectos</a></li>
+        <li><a class="hover:text-marca" href="#terrenos">Terrenos</a></li>
+        <li><a class="hover:text-marca" href="#transparencia">Transparencia</a></li>
+        <li><a class="hover:text-marca" href="#faq">Preguntas</a></li>
+        <li><a class="px-4 py-2 rounded-full bg-marca text-white hover:opacity-90" href="#participar">Quiero participar</a></li>
+        <li><a class="text-slate-500 hover:text-marca" href="<?= url ?>?p=app">Ingresar</a></li>
+        <li><button onclick="alternarTema()" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Cambiar modo claro u oscuro">◐</button></li>
+      </ul>
+    </nav>
+    <ul id="menuMovil" class="lg:hidden hidden px-4 pb-4 space-y-2 text-sm font-medium">
+      <li><a class="block py-2" href="#como">Cómo trabajamos</a></li>
+      <li><a class="block py-2" href="#proyectos">Proyectos</a></li>
+      <li><a class="block py-2" href="#terrenos">Terrenos</a></li>
+      <li><a class="block py-2" href="#transparencia">Transparencia</a></li>
+      <li><a class="block py-2" href="#faq">Preguntas frecuentes</a></li>
+      <li><a class="block py-2" href="#participar">Quiero participar</a></li>
+      <li><a class="block py-2" href="<?= url ?>?p=app">Ingresar a la plataforma</a></li>
+    </ul>
+  </header>
+
+  <main>
+    <!-- INICIO -->
+    <section id="inicio" class="relative overflow-hidden">
+      <div class="absolute inset-0 bg-marca"></div>
+      <? if (marca.imagen_portada_url && /^https:\/\//.test(marca.imagen_portada_url)) { ?>
+      <img src="<?= marca.imagen_portada_url ?>" alt="" class="absolute inset-0 w-full h-full object-cover opacity-30" loading="eager">
+      <? } else { ?>
+      <svg class="absolute right-0 bottom-0 w-full md:w-2/3 h-full opacity-20 text-white" viewBox="0 0 600 400" preserveAspectRatio="xMaxYMax meet" aria-hidden="true">
+        <g fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="60" y="140" width="110" height="260"/><rect x="190" y="60" width="140" height="340"/><rect x="350" y="180" width="100" height="220"/><rect x="470" y="110" width="110" height="290"/>
+          <path d="M210 90h100M210 130h100M210 170h100M210 210h100M210 250h100M210 290h100M80 170h70M80 210h70M80 250h70M370 210h60M370 250h60M490 140h70M490 180h70M490 220h70"/>
+        </g>
+      </svg>
+      <? } ?>
+      <div class="relative max-w-6xl mx-auto px-4 py-24 md:py-32 text-white">
+        <p class="uppercase tracking-[0.2em] text-xs text-acento font-semibold mb-4 animar">Desarrollos inmobiliarios mediante fideicomisos</p>
+        <h1 class="font-serif text-4xl md:text-6xl font-bold leading-tight max-w-3xl animar"><?= marca.eslogan ?></h1>
+        <p class="mt-6 max-w-2xl text-white/80 text-lg animar">Estructuramos, administramos y comercializamos proyectos con reglas claras, información verificable y control profesional en cada etapa.</p>
+        <div class="mt-10 flex flex-wrap gap-3 animar">
+          <a href="#participar" class="px-6 py-3 rounded-full bg-acento text-slate-900 font-semibold hover:opacity-90">Quiero participar</a>
+          <a href="#terrenos" class="px-6 py-3 rounded-full border border-white/40 hover:bg-white/10">Tengo un terreno</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROPUESTA DE VALOR -->
+    <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-3 gap-6">
+      <div class="tarjeta"><h3 class="titulo-tarjeta">Transparencia</h3><p>Cada fideicomiso tiene cuentas separadas, cronograma y avance respaldado por certificaciones profesionales.</p></div>
+      <div class="tarjeta"><h3 class="titulo-tarjeta">Trazabilidad</h3><p>Cada aporte, cuota y gasto queda registrado y auditado. Los beneficiarios consultan su situación en un portal privado.</p></div>
+      <div class="tarjeta"><h3 class="titulo-tarjeta">Reglas claras</h3><p>Las condiciones de aportes, cesiones y salidas surgen exclusivamente del contrato de cada proyecto.</p></div>
+    </section>
+
+    <!-- CÓMO TRABAJAMOS -->
+    <section id="como" class="bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-800">
+      <div class="max-w-6xl mx-auto px-4 py-20">
+        <h2 class="titulo-seccion">Cómo trabajamos</h2>
+        <p class="subtitulo-seccion">Un fideicomiso inmobiliario es un contrato por el cual los participantes transmiten bienes o fondos a un fiduciario, que los administra con un fin determinado —construir— en beneficio de quienes el contrato designe.</p>
+        <ol class="mt-10 grid md:grid-cols-4 gap-6">
+          <li class="paso"><span class="numero-paso">1</span><h3 class="font-semibold">Terreno y evaluación</h3><p>Verificamos titularidad, normativa urbanística y viabilidad económica antes de comprometer recursos.</p></li>
+          <li class="paso"><span class="numero-paso">2</span><h3 class="font-semibold">Etapa preliminar</h3><p>Estudios, mensura y anteproyecto. Los aportes de esta etapa se rigen por su propio instrumento.</p></li>
+          <li class="paso"><span class="numero-paso">3</span><h3 class="font-semibold">Constitución</h3><p>Se firma el contrato de fideicomiso con presupuesto, cronograma, reglas de aportes y de salida.</p></li>
+          <li class="paso"><span class="numero-paso">4</span><h3 class="font-semibold">Obra y entrega</h3><p>Los beneficiarios aportan en cuotas, la obra avanza con certificaciones y se adjudican las unidades.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- PROYECTOS -->
+    <section id="proyectos" class="max-w-6xl mx-auto px-4 py-20">
+      <h2 class="titulo-seccion">Proyectos</h2>
+      <p class="subtitulo-seccion">Emprendimientos con información autorizada para su difusión.</p>
+      <div id="listaProyectos" class="mt-10 grid md:grid-cols-3 gap-6"><p class="text-slate-500">Cargando proyectos…</p></div>
+    </section>
+
+    <!-- TRANSPARENCIA -->
+    <section id="transparencia" class="bg-white dark:bg-slate-900 border-y border-slate-200 dark:border-slate-800">
+      <div class="max-w-6xl mx-auto px-4 py-20">
+        <h2 class="titulo-seccion">Transparencia</h2>
+        <p class="subtitulo-seccion">Estado y avance físico certificado de los proyectos publicados. Los beneficiarios acceden al detalle financiero de su fideicomiso desde el portal privado.</p>
+        <div class="mt-8 overflow-x-auto">
+          <table class="tabla"><thead><tr><th>Proyecto</th><th>Etapa</th><th>Avance físico certificado</th><th>Entrega estimada*</th></tr></thead>
+            <tbody id="tablaTransparencia"><tr><td colspan="4" class="text-slate-500">Cargando…</td></tr></tbody></table>
+        </div>
+        <p class="mt-3 text-xs text-slate-500">* Fecha estimada sujeta a las condiciones contractuales; no constituye un plazo garantizado.</p>
+      </div>
+    </section>
+
+    <!-- TERRENOS -->
+    <section id="terrenos" class="max-w-6xl mx-auto px-4 py-20 grid md:grid-cols-2 gap-10">
+      <div>
+        <h2 class="titulo-seccion">¿Tiene un terreno?</h2>
+        <p class="subtitulo-seccion">Convocamos a propietarios interesados en incorporar su terreno a nuevos desarrollos, mediante venta, permuta por unidades u otras modalidades a convenir.</p>
+        <ul class="mt-6 space-y-2 text-sm text-slate-600 dark:text-slate-300 list-disc pl-5">
+          <li>Evaluamos ubicación, superficie, normativa y situación dominial.</li>
+          <li>La recepción del formulario no implica aceptación ni evaluación del terreno.</li>
+          <li>Sus datos se usan solo para contactarlo sobre esta propuesta.</li>
+        </ul>
+      </div>
+      <form id="formTerreno" class="formulario" novalidate>
+        <input type="text" name="sitio_web" class="hidden" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <label>Nombre y apellido<input name="nombre" required maxlength="120"></label>
+        <div class="grid sm:grid-cols-2 gap-4"><label>Email<input name="email" type="email" required maxlength="120"></label>
+        <label>Teléfono<input name="telefono" type="tel" maxlength="40"></label></div>
+        <label>Ubicación (barrio / ciudad)<input name="ubicacion" required maxlength="200"></label>
+        <div class="grid sm:grid-cols-2 gap-4"><label>Superficie aproximada (m²)<input name="superficie_m2" type="number" min="0"></label>
+        <label>Medidas<input name="medidas" maxlength="60" placeholder="Ej: 10 x 30"></label></div>
+        <label>Comentarios<textarea name="mensaje" rows="3" maxlength="2000"></textarea></label>
+        <label class="flex gap-2 items-start text-sm font-normal"><input type="checkbox" name="consentimiento" class="mt-1 w-auto"> Acepto que utilicen mis datos para contactarme sobre esta propuesta.</label>
+        <button class="boton-primario">Enviar propuesta</button>
+      </form>
+    </section>
+
+    <!-- QUIERO PARTICIPAR -->
+    <section id="participar" class="bg-marca text-white">
+      <div class="max-w-6xl mx-auto px-4 py-20 grid md:grid-cols-2 gap-10">
+        <div>
+          <h2 class="font-serif text-3xl md:text-4xl font-bold">Quiero participar</h2>
+          <p class="mt-4 text-white/80">Déjenos sus datos y un asesor le explicará cómo funcionan nuestros fideicomisos, los proyectos habilitados y las condiciones contractuales. Sin compromiso.</p>
+          <p class="mt-6 text-sm text-white/70">No ofrecemos rentabilidades garantizadas ni plazos incondicionales. Toda participación implica riesgos que se explican en la documentación de cada proyecto.</p>
+        </div>
+        <form id="formContacto" class="formulario bg-white text-slate-800 dark:bg-slate-900 dark:text-slate-100" novalidate>
+          <input type="text" name="sitio_web" class="hidden" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <label>Nombre y apellido<input name="nombre" required maxlength="120"></label>
+          <div class="grid sm:grid-cols-2 gap-4"><label>Email<input name="email" type="email" required maxlength="120"></label>
+          <label>Teléfono<input name="telefono" type="tel" maxlength="40"></label></div>
+          <label>Me interesa
+            <select name="interes"><option value="BENEFICIARIO_POTENCIAL">Adquirir una unidad como beneficiario</option>
+              <option value="APORTANTE_PRELIMINAR">Participar en la etapa preliminar</option><option value="INVERSOR">Conocer opciones de inversión</option>
+              <option value="CONSULTA_GENERAL">Hacer una consulta general</option></select></label>
+          <label>Mensaje<textarea name="mensaje" rows="3" maxlength="2000"></textarea></label>
+          <label class="flex gap-2 items-start text-sm font-normal"><input type="checkbox" name="consentimiento" class="mt-1 w-auto"> Acepto que utilicen mis datos para contactarme. Puedo pedir la baja cuando quiera.</label>
+          <button class="boton-primario">Quiero que me contacten</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="max-w-4xl mx-auto px-4 py-20">
+      <h2 class="titulo-seccion">Preguntas frecuentes</h2>
+      <div class="mt-8 space-y-3">
+        <details class="faq"><summary>¿Qué es un aporte y qué es una cuota?</summary><p>El aporte inicial y las cuotas son las sumas que cada beneficiario se compromete a integrar según su contrato. Sus montos, vencimientos y ajustes surgen exclusivamente del contrato firmado.</p></details>
+        <details class="faq"><summary>¿Qué es el pozo preliminar?</summary><p>Son los fondos destinados a gastos previos a la constitución del fideicomiso (estudios, mensura, anteproyectos, trámites). Un aporte preliminar no otorga automáticamente participación, rentabilidad ni derecho a devolución: las condiciones surgen del instrumento que se firme.</p></details>
+        <details class="faq"><summary>¿Cuánto tarda la obra?</summary><p>Cada proyecto tiene un cronograma estimado. Los plazos pueden variar por causas técnicas, económicas o administrativas, y no son incondicionales. El avance se informa con certificaciones profesionales.</p></details>
+        <details class="faq"><summary>¿Puedo ceder mi lugar o retirarme?</summary><p>Sí, en las condiciones previstas por su contrato. Puede iniciar una solicitud desde el portal. Cada caso se analiza y decide por los responsables; no garantizamos compradores, precios de salida ni reintegros.</p></details>
+        <details class="faq"><summary>¿Qué riesgos existen?</summary><p>Entre otros: aumentos de costos, demoras, incumplimientos de otros participantes y cambios normativos. La documentación de cada proyecto detalla los riesgos y cómo se gestionan.</p></details>
+        <details class="faq"><summary>¿Cómo controlo mis pagos?</summary><p>Desde el portal privado consulta su estado de cuenta, vencimientos, recibos y el avance de la obra. Un pago se acredita cuando la administración lo verifica contra el extracto bancario.</p></details>
+      </div>
+    </section>
+
+    <!-- CONTACTO -->
+    <section id="contacto" class="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+      <div class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-3 gap-6 text-sm">
+        <div><h3 class="font-semibold mb-2">Contacto</h3>
+          <? if (marca.whatsapp_publico) { ?><p><a class="text-marca underline" rel="noopener" href="https://wa.me/<?= String(marca.whatsapp_publico).replace(/\D/g, '') ?>">WhatsApp</a></p><? } ?>
+          <? if (marca.email_publico) { ?><p><a class="text-marca underline" href="mailto:<?= marca.email_publico ?>"><?= marca.email_publico ?></a></p><? } ?>
+          <? if (marca.direccion_publica) { ?><p><?= marca.direccion_publica ?></p><? } ?>
+          <? if (!marca.whatsapp_publico && !marca.email_publico) { ?><p class="text-slate-500">Utilice el formulario “Quiero participar”.</p><? } ?>
+        </div>
+        <div class="md:col-span-2 text-slate-500"><h3 class="font-semibold mb-2 text-slate-700 dark:text-slate-300">Aviso legal</h3><p><?= marca.aviso_legal ?></p></div>
+      </div>
+    </section>
+  </main>
+  <footer class="text-center text-xs text-slate-500 py-6">© <span id="anio"></span> <?= marca.nombre_comercial ?></footer>
+
+  <?!= include_('ui/Comun') ?>
+  <script>
+    document.getElementById('anio').textContent = new Date().getFullYear();
+    document.getElementById('btnMenu').addEventListener('click', function () {
+      var m = document.getElementById('menuMovil'); m.classList.toggle('hidden');
+      this.setAttribute('aria-expanded', String(!m.classList.contains('hidden')));
+    });
+
+    function enviar(formId, accion) {
+      var f = document.getElementById(formId);
+      f.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var d = datosForm(f);
+        if (!d.nombre || !d.email) return aviso('Complete nombre y email.', 'error');
+        if (!d.consentimiento) return aviso('Debe aceptar el uso de sus datos para que podamos contactarlo.', 'error');
+        var b = f.querySelector('button'), texto = b.textContent; b.disabled = true; b.textContent = 'Enviando…';
+        llamar(accion, d, { sinToken: true }).then(function (r) { aviso(r.mensaje, 'ok'); f.reset(); })
+          .catch(function (e) { aviso(e.mensaje, 'error'); })
+          .then(function () { b.disabled = false; b.textContent = texto; });
+      });
+    }
+    enviar('formTerreno', 'publico.terreno');
+    enviar('formContacto', 'publico.contacto');
+
+    llamar('publico.proyectos', {}, { sinToken: true }).then(function (lista) {
+      var cont = document.getElementById('listaProyectos');
+      var tabla = document.getElementById('tablaTransparencia');
+      if (!lista.length) {
+        cont.innerHTML = '<p class="text-slate-500">Próximamente publicaremos nuevos proyectos.</p>';
+        tabla.innerHTML = '<tr><td colspan="4" class="text-slate-500">Sin proyectos publicados.</td></tr>';
+        return;
+      }
+      var etapas = { EN_EVALUACION: 'En evaluación', PREPARACION_PRELIMINAR: 'Preparación preliminar', CONSTITUCION_JURIDICA: 'Constitución jurídica',
+        LANZAMIENTO: 'Lanzamiento', COMERCIALIZACION: 'Comercialización', EJECUCION: 'En obra', FINALIZACION: 'Finalización', ADJUDICACION: 'Adjudicación', LIQUIDACION: 'Liquidación' };
+      cont.innerHTML = lista.map(function (p) {
+        var img = urlSegura(p.imagen_url);
+        return '<article class="tarjeta p-0 overflow-hidden">' +
+          (img ? '<img src="' + esc(img) + '" alt="" loading="lazy" class="h-44 w-full object-cover">' : '<div class="h-44 bg-marca grid place-items-center text-white/70 font-serif text-2xl">' + esc(p.denominacion.charAt(0)) + '</div>') +
+          '<div class="p-5"><span class="text-xs uppercase tracking-wide text-acento font-semibold">' + esc(etapas[p.estado] || p.estado) + '</span>' +
+          '<h3 class="font-serif text-xl font-bold mt-1">' + esc(p.denominacion) + '</h3>' +
+          '<p class="text-sm mt-2 text-slate-600 dark:text-slate-300">' + esc(p.descripcion || '') + '</p>' +
+          (p.unidades ? '<p class="text-xs mt-3 text-slate-500">' + esc(p.unidades) + ' unidades proyectadas</p>' : '') + '</div></article>';
+      }).join('');
+      tabla.innerHTML = lista.map(function (p) {
+        var av = p.avance_fisico === null ? '—' : esc(p.avance_fisico) + '%';
+        return '<tr><td>' + esc(p.denominacion) + '</td><td>' + esc(etapas[p.estado] || p.estado) + '</td><td>' +
+          (p.avance_fisico === null ? '—' : '<div class="flex items-center gap-2"><div class="barra"><div style="width:' + Math.max(0, Math.min(100, Number(p.avance_fisico))) + '%"></div></div>' + av + '</div>') +
+          '</td><td>' + esc(p.fecha_estimada_entrega || '—') + '</td></tr>';
+      }).join('');
+    }).catch(function (e) { document.getElementById('listaProyectos').innerHTML = '<p class="text-red-600">' + esc(e.mensaje) + '</p>'; });
+  </script>
+</body>
+</html>

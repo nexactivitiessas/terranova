@@ -1,0 +1,15 @@
+{
+  "scriptId": "PEGAR_AQUI_EL_ID_DEL_PROYECTO_APPS_SCRIPT",
+  "rootDir": "src",
+  "filePushOrder": [
+    "src/core/Config.js",
+    "src/core/Esquema.js",
+    "src/core/Util.js",
+    "src/core/Db.js",
+    "src/core/Auditoria.js",
+    "src/core/Auth.js",
+    "src/core/Permisos.js",
+    "src/core/Api.js",
+    "src/core/Instalacion.js"
+  ]
+}

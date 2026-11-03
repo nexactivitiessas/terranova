@@ -25,7 +25,7 @@ var PERMISOS_DEFECTO = {
   ASESOR_JURIDICO: { fideicomisos: 'leer,editar,aprobar', terrenos: 'leer,editar,aprobar', documentos: 'leer,crear,aprobar',
     cesiones: 'leer,editar,aprobar', contenidos: 'leer,editar,aprobar', beneficiarios: 'leer', preliminar: 'leer' },
   RESPONSABLE_OBRA: { obras: 'leer,crear,editar', documentos: 'leer,crear', fideicomisos: 'leer', alertas: 'leer' },
-  ATENCION_BENEFICIARIO: { beneficiarios: 'leer,editar', cuotas: 'leer', pagos: 'leer,crear', cesiones: 'leer,crear,editar',
+  ATENCION_BENEFICIARIO: { beneficiarios: 'leer,editar', tareas: 'leer', cuotas: 'leer', pagos: 'leer,crear', cesiones: 'leer,crear,editar',
     documentos: 'leer', crm: 'leer,crear,editar', alertas: 'leer' },
   BENEFICIARIO: { portal: 'leer,crear' },
   VISITANTE: {}

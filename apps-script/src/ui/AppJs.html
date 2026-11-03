@@ -1,0 +1,686 @@
+<script>
+/* AppJs.html — Panel administrativo y portal del beneficiario (SPA). Seguridad real en el backend; aquí solo UX. */
+var SESION = { token: '', usuario: null, menu: [] };
+var ESTADO = { proyecto: '', esquemas: {}, registros: {}, refs: {}, vista: '' };
+
+// ---------- Etiquetas ----------
+var ETIQUETAS = { proyecto_id: 'Fideicomiso', creado_en: 'Creado', actualizado_en: 'Actualizado', usuario_responsable: 'Responsable',
+  es_prueba: 'Dato de prueba', superficie_m2: 'Superficie (m²)', req_estructura_juridica_revisada: 'Estructura jurídica revisada',
+  req_contrato_aprobado: 'Contrato aprobado', req_responsables_identificados: 'Responsables identificados', req_presupuesto_validado: 'Presupuesto validado',
+  req_cronograma: 'Cronograma', req_reglas_aportes: 'Reglas de aportes', req_reglas_salida: 'Reglas de salida', req_publicidad_aprobada: 'Publicidad aprobada' };
+function etiqueta(c) { return ETIQUETAS[c] || (c.charAt(0).toUpperCase() + c.slice(1)).replace(/_id$/, '').replace(/_/g, ' '); }
+function humano(v) { return String(v || '').replace(/_/g, ' ').toLowerCase().replace(/^./, function (x) { return x.toUpperCase(); }); }
+
+function badge(estado) {
+  var s = String(estado || '');
+  var color = /RECHAZ|ERROR|VENCIDA|CRITICA|ANULAD|BLOQUE|INACTIVO|DESVINC/.test(s) ? 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300'
+    : /PENDIENTE|REQUIERE|ADVERTENCIA|PARCIAL|EVALUACION|ANALISIS|INICIADA|BORRADOR|PRESENTADA/.test(s) ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+    : /ACREDIT|PAGADA|APROBAD|ACTIVO|COMPLETADA|PUBLICAD|FORMALIZADA|RESUELTA|OK|DISPONIBLE|COMERCIALIZACION|EJECUCION/.test(s) ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+    : 'bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+  return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ' + color + '">' + esc(humano(s)) + '</span>';
+}
+
+function formatear(col, v) {
+  if (v === '' || v === null || v === undefined) return '<span class="text-slate-400">—</span>';
+  if (!col) return esc(v);
+  if (col.nombre === 'estado' || col.nombre === 'severidad' || col.nombre === 'etapa') return badge(v);
+  if (col.tipo === 'moneda') return '<span class="tabular-nums whitespace-nowrap">' + esc(moneda(v)) + '</span>';
+  if (col.tipo === 'fecha' || col.tipo === 'fechahora') return '<span class="whitespace-nowrap">' + esc(fecha(v)) + '</span>';
+  if (col.tipo === 'bool') return v ? 'Sí' : 'No';
+  if (col.tipo === 'ref' && ESTADO.refs[col.ref] && ESTADO.refs[col.ref][v]) return esc(ESTADO.refs[col.ref][v]);
+  if (col.nombre === 'url' || col.nombre === 'enlace' || /_url$/.test(col.nombre)) { var u = urlSegura(v); return u ? '<a class="text-marca underline" target="_blank" rel="noopener" href="' + esc(u) + '">Abrir</a>' : esc(v); }
+  var s = String(v);
+  return esc(s.length > 80 ? s.slice(0, 80) + '…' : s);
+}
+
+// ---------- Definición de vistas ----------
+// Campo de acción: [nombre, tipo, etiqueta, opciones]
+var V = {
+  dashboard: { titulo: 'Tablero', render: vistaDashboard },
+  fideicomisos: { titulo: 'Fideicomisos', tabs: [
+    { hoja: 'PROYECTOS', cols: ['denominacion', 'tipo_fideicomiso', 'modalidad_oferta', 'estado', 'presupuesto_total', 'fecha_estimada_entrega'],
+      crear: { accion: 'fideicomisos.crear', campos: [['denominacion', 'texto', 'Denominación'], ['tipo_fideicomiso', 'enum', 'Tipo', ['ORDINARIO', 'FINANCIERO']],
+        ['modalidad_oferta', 'enum', 'Oferta', ['PRIVADA', 'PUBLICA']], ['fiduciario_id', 'ref:FIDUCIARIOS', 'Fiduciario'], ['terreno_id', 'ref:TERRENOS', 'Terreno'],
+        ['objeto', 'textarea', 'Objeto'], ['presupuesto_total', 'moneda', 'Presupuesto (ARS)'], ['unidades_proyectadas', 'numero', 'Unidades proyectadas'],
+        ['plazo_contractual_meses', 'numero', 'Plazo contractual (meses)'], ['fecha_estimada_entrega', 'fecha', 'Entrega estimada']] },
+      acciones: [
+        { t: 'Habilitación y resumen', a: 'fideicomisos.resumen', id: 'proyecto_id', mostrar: mostrarResumenFideicomiso },
+        { t: 'Marcar requisito comercial', a: 'fideicomisos.marcarRequisito', id: 'proyecto_id', campos: [['requisito', 'enum', 'Requisito', ['req_estructura_juridica_revisada', 'req_contrato_aprobado', 'req_responsables_identificados', 'req_presupuesto_validado', 'req_cronograma', 'req_reglas_aportes', 'req_reglas_salida', 'req_publicidad_aprobada']], ['valor', 'bool', 'Cumplido'], ['motivo', 'texto', 'Respaldo (documento, dictamen, acta)']] },
+        { t: 'Cambiar estado', a: 'fideicomisos.cambiarEstado', id: 'proyecto_id', campos: [['estado', 'enum', 'Nuevo estado', ['PREPARACION_PRELIMINAR', 'CONSTITUCION_JURIDICA', 'LANZAMIENTO', 'COMERCIALIZACION', 'EJECUCION', 'FINALIZACION', 'ADJUDICACION', 'LIQUIDACION', 'CERRADO']], ['motivo', 'texto', 'Motivo']] },
+        { t: 'Publicar / ocultar en la web', a: 'fideicomisos.publicar', id: 'proyecto_id', campos: [['publico', 'bool', 'Visible en la web'], ['motivo', 'texto', 'Motivo']] }] },
+    { hoja: 'FIDUCIARIOS', cols: ['razon_social', 'cuit', 'representante', 'email'] },
+    { hoja: 'FIDUCIANTES', cols: ['nombre', 'documento', 'tipo_aporte', 'proyecto_id'] },
+    { hoja: 'UNIDADES', cols: ['codigo', 'tipo', 'superficie_m2', 'valor_referencia', 'beneficiario_id', 'disponible', 'proyecto_id'] },
+    { hoja: 'PRESUPUESTOS', cols: ['rubro', 'importe', 'vigente_desde', 'proyecto_id'] }] },
+  terrenos: { titulo: 'Captación de terrenos', tabs: [
+    { hoja: 'TERRENOS', cols: ['ubicacion', 'superficie_m2', 'estado', 'titularidad_verificada', 'precio_solicitado', 'responsable_comercial'],
+      acciones: [
+        { t: 'Ficha completa', a: 'terrenos.ficha', id: 'terreno_id', mostrar: 'objeto' },
+        { t: 'Cambiar estado', a: 'terrenos.cambiarEstado', id: 'terreno_id', campos: [['estado', 'enum', 'Estado', ['CONTACTADO', 'DOCUMENTACION_PENDIENTE', 'EVALUACION_JURIDICA', 'EVALUACION_URBANISTICA', 'EVALUACION_ECONOMICA', 'NEGOCIACION', 'APROBADO', 'RECHAZADO', 'INCORPORADO_A_PROYECTO']], ['proyecto_id', 'ref:PROYECTOS', 'Fideicomiso (si se incorpora)'], ['motivo', 'texto', 'Motivo']] },
+        { t: 'Verificar titularidad (jurídico)', a: 'terrenos.verificarTitularidad', id: 'terreno_id', campos: [['valor', 'bool', 'Titularidad verificada'], ['motivo', 'texto', 'Respaldo (informe de dominio, escritura)']] }] },
+    { hoja: 'PROPIETARIOS', cols: ['nombre', 'email', 'telefono', 'consentimiento_contacto'] }] },
+  crm: { titulo: 'CRM comercial', herramientas: [{ t: 'Embudo comercial', a: 'crm.embudo', mostrar: mostrarEmbudo }, { t: 'Estado de WhatsApp', a: 'crm.whatsappEstado', mostrar: 'objeto' }],
+    tabs: [
+    { hoja: 'CONTACTOS_CRM', cols: ['nombre', 'clasificacion', 'fuente', 'estado', 'asesor', 'consentimiento', 'proximo_seguimiento'],
+      acciones: [
+        { t: 'Registrar mensaje', a: 'crm.registrarMensaje', id: 'contacto_id', campos: [['canal', 'enum', 'Canal', ['WHATSAPP', 'EMAIL', 'TELEFONO', 'REUNION', 'MANUAL']], ['direccion', 'enum', 'Dirección', ['SALIENTE', 'ENTRANTE']], ['mensaje', 'textarea', 'Mensaje'], ['enviarWhatsApp', 'bool', 'Enviar por WhatsApp Cloud API (solo si está configurado)']], mostrar: 'objeto' },
+        { t: 'Baja de comunicaciones', a: 'crm.baja', id: 'contacto_id', campos: [['motivo', 'texto', 'Motivo']] }] },
+    { hoja: 'OPORTUNIDADES', cols: ['contacto_id', 'etapa', 'valor_estimado', 'asesor', 'proxima_accion', 'fecha_proxima_accion'],
+      acciones: [{ t: 'Mover de etapa', a: 'crm.moverEtapa', id: 'oportunidad_id', campos: [['etapa', 'enum', 'Etapa', ['NUEVO_CONTACTO', 'PRIMER_CONTACTO', 'CALIFICACION', 'PRESENTACION_PROYECTO', 'ENVIO_INFORMACION', 'REUNION', 'PROPUESTA', 'EVALUACION_DOCUMENTAL', 'FORMALIZACION', 'INCORPORACION', 'SEGUIMIENTO', 'DESCARTADO']], ['proxima_accion', 'texto', 'Próxima acción'], ['fecha_proxima_accion', 'fecha', 'Fecha'], ['motivo', 'texto', 'Motivo / notas']] }] },
+    { hoja: 'CONVERSACIONES', cols: ['contacto_id', 'canal', 'direccion', 'mensaje', 'fecha', 'estado'] }] },
+  preliminar: { titulo: 'Pozo preliminar', tabs: [
+    { hoja: 'APORTES_PRELIMINARES', cols: ['aportante_nombre', 'fecha', 'importe', 'destino', 'estado', 'contrato_id', 'proyecto_id'],
+      crear: { accion: 'preliminar.registrar', campos: [['proyecto_id', 'ref:PROYECTOS', 'Fideicomiso'], ['aportante_nombre', 'texto', 'Aportante'], ['fecha', 'fecha', 'Fecha'],
+        ['importe', 'moneda', 'Importe (ARS)'], ['destino', 'texto', 'Destino'], ['contrato_id', 'ref:CONTRATOS', 'Instrumento contractual'], ['condicion', 'texto', 'Condición (según instrumento)'],
+        ['beneficios_pactados', 'texto', 'Beneficios pactados (si el instrumento los prevé)']] },
+      acciones: [
+        { t: 'Verificar y acreditar', a: 'preliminar.verificar', id: 'aporte_id', si: function (r) { return r.estado === 'PENDIENTE_VERIFICACION'; }, campos: [['motivo', 'texto', 'Referencia del extracto']], extra: { aprobar: true } },
+        { t: 'Rechazar', a: 'preliminar.verificar', id: 'aporte_id', si: function (r) { return r.estado === 'PENDIENTE_VERIFICACION'; }, campos: [['motivo', 'texto', 'Motivo del rechazo']], extra: { aprobar: false } }] },
+    { hoja: 'GASTOS', titulo: 'Gastos', cols: ['fecha', 'categoria', 'es_preliminar', 'proveedor', 'importe', 'estado', 'proyecto_id'] }] },
+  beneficiarios: { titulo: 'Beneficiarios', tabs: [
+    { hoja: 'BENEFICIARIOS', cols: ['nombre', 'documento', 'unidad_id', 'estado_contractual', 'fecha_adhesion', 'estado', 'proyecto_id'],
+      acciones: [
+        { t: 'Legajo completo', a: 'beneficiarios.legajo', id: 'beneficiario_id', mostrar: mostrarLegajo },
+        { t: 'Generar plan de cuotas', a: 'cuotas.generarPlan', id: 'beneficiario_id', conProyecto: true, idem: true, campos: [['valor_total', 'moneda', 'Valor total (ARS)'], ['aporte_inicial', 'moneda', 'Aporte inicial'], ['cantidad_cuotas', 'numero', 'Cantidad de cuotas'], ['primer_vencimiento', 'fecha', 'Primer vencimiento'], ['fecha_aporte_inicial', 'fecha', 'Fecha del aporte inicial']], mostrar: function (r) { return '<p>Plan <b>' + esc(r.plan_id) + '</b>: ' + r.cuotas.length + ' cuotas ' + (r.reutilizado ? '(ya existía, no se duplicó)' : 'generadas') + '.</p>'; } },
+        { t: 'Iniciar solicitud de cesión/salida', a: 'cesiones.iniciar', id: 'beneficiario_id', campos: [['alternativa', 'enum', 'Alternativa', ['CESION_DERECHOS', 'SUSTITUCION_BENEFICIARIO', 'RESOLUCION_CONTRACTUAL', 'REEMBOLSO', 'OTRA']], ['motivo', 'textarea', 'Motivo']] }] },
+    { hoja: 'CONTRATOS', cols: ['tipo', 'parte_id', 'fecha_firma', 'estado', 'aprobado_por', 'proyecto_id'] },
+    { hoja: 'TAREAS', titulo: 'Solicitudes', filtros: { tipo: 'SOLICITUD_BENEFICIARIO' }, cols: ['payload', 'estado', 'creado_en', 'proyecto_id'],
+      acciones: [{ t: 'Responder', a: 'beneficiarios.responderSolicitud', id: 'tarea_id', si: function (r) { return r.estado === 'PENDIENTE'; }, campos: [['respuesta', 'textarea', 'Respuesta al beneficiario']] }] }] },
+  cuotas: { titulo: 'Cuotas', herramientas: [
+      { t: 'Morosidad', a: 'finanzas.morosidad', conProyecto: true, mostrar: 'tabla' },
+      { t: 'Proyección de recaudación (12 meses)', a: 'finanzas.proyeccion', conProyecto: true, mostrar: mostrarProyeccion },
+      { t: 'Calendario de vencimientos', a: 'finanzas.calendario', conProyecto: true, campos: [['desde', 'fecha', 'Desde'], ['hasta', 'fecha', 'Hasta']], mostrar: 'tabla' }],
+    tabs: [{ hoja: 'CUOTAS', cols: ['beneficiario_id', 'numero', 'vencimiento', 'importe', 'pagado', 'saldo', 'estado', 'proyecto_id'],
+      acciones: [{ t: 'Estado de cuenta del beneficiario', a: 'cuotas.estadoCuenta', id: 'beneficiario_id', campoId: 'beneficiario_id', mostrar: mostrarEstadoCuenta }] }] },
+  pagos: { titulo: 'Pagos', herramientas: [{ t: 'Conciliación con extracto', a: 'finanzas.conciliar', conProyecto: true, campos: [['extracto', 'textarea', 'Pegue líneas: fecha;importe;referencia (una por línea)']], preparar: prepararExtracto, mostrar: mostrarConciliacion }],
+    tabs: [{ hoja: 'PAGOS', cols: ['beneficiario_id', 'fecha', 'importe', 'medio', 'referencia_bancaria', 'estado', 'cargado_por_beneficiario', 'proyecto_id'],
+      crear: { accion: 'pagos.registrar', idem: true, campos: [['beneficiario_id', 'ref:BENEFICIARIOS', 'Beneficiario'], ['importe', 'moneda', 'Importe (ARS)'], ['fecha', 'fecha', 'Fecha'], ['medio', 'enum', 'Medio', ['TRANSFERENCIA', 'DEPOSITO', 'EFECTIVO', 'OTRO']], ['referencia_bancaria', 'texto', 'Referencia bancaria'], ['comprobante_id', 'ref:DOCUMENTOS', 'Comprobante']] },
+      acciones: [
+        { t: 'Verificar contra extracto y acreditar', a: 'pagos.verificar', id: 'pago_id', si: function (r) { return r.estado === 'PENDIENTE_VERIFICACION'; }, campos: [['referencia_verificada', 'texto', 'Referencia del extracto bancario verificado']], extra: { aprobar: true } },
+        { t: 'Rechazar', a: 'pagos.verificar', id: 'pago_id', si: function (r) { return r.estado === 'PENDIENTE_VERIFICACION'; }, campos: [['motivo', 'texto', 'Motivo']], extra: { aprobar: false } },
+        { t: 'Recibo', a: 'pagos.recibo', id: 'pago_id', si: function (r) { return r.estado === 'ACREDITADO'; }, mostrar: mostrarRecibo },
+        { t: 'Anular (movimiento compensatorio)', a: 'pagos.anular', id: 'pago_id', si: function (r) { return r.estado === 'ACREDITADO'; }, campos: [['motivo', 'texto', 'Motivo']] }] }] },
+  finanzas: { titulo: 'Finanzas', herramientas: [{ t: 'Saldo del fideicomiso', a: 'finanzas.saldo', conProyecto: true, requiereProyecto: true, mostrar: mostrarSaldo }],
+    tabs: [
+    { hoja: 'MOVIMIENTOS', cols: ['fecha', 'tipo', 'sentido', 'importe', 'concepto', 'rectifica_id', 'proyecto_id'],
+      acciones: [{ t: 'Rectificar (asiento compensatorio)', a: 'finanzas.rectificar', id: 'movimiento_id', campos: [['motivo', 'texto', 'Motivo']] }] },
+    { hoja: 'GASTOS', cols: ['fecha', 'categoria', 'es_preliminar', 'proveedor', 'importe', 'estado', 'proyecto_id'],
+      crear: { accion: 'finanzas.registrarGasto', idem: true, campos: [['proyecto_id', 'ref:PROYECTOS', 'Fideicomiso'], ['fecha', 'fecha', 'Fecha'], ['es_preliminar', 'bool', 'Gasto preliminar'],
+        ['categoria', 'enum', 'Categoría', ['ESTUDIOS_FACTIBILIDAD', 'MENSURA', 'ANTEPROYECTOS', 'PLANOS', 'HONORARIOS_PROFESIONALES', 'ASESORAMIENTO_JURIDICO', 'TRAMITES_ADMINISTRATIVOS', 'PERMISOS', 'ESTUDIOS_TECNICOS', 'GASTOS_CONSTITUCION', 'CONTINGENCIAS_AUTORIZADAS', 'MATERIALES', 'MANO_DE_OBRA', 'SUBCONTRATOS', 'OTROS']],
+        ['proveedor', 'texto', 'Proveedor'], ['importe', 'moneda', 'Importe (ARS)'], ['obra_id', 'ref:OBRAS', 'Obra'], ['concepto', 'texto', 'Concepto'], ['comprobante_id', 'ref:DOCUMENTOS', 'Comprobante']] },
+      acciones: [
+        { t: 'Aprobar gasto', a: 'finanzas.aprobarGasto', id: 'gasto_id', si: function (r) { return r.estado === 'PENDIENTE_APROBACION'; }, campos: [['motivo', 'texto', 'Observación']], extra: { aprobar: true } },
+        { t: 'Rechazar gasto', a: 'finanzas.aprobarGasto', id: 'gasto_id', si: function (r) { return r.estado === 'PENDIENTE_APROBACION'; }, campos: [['motivo', 'texto', 'Motivo']], extra: { aprobar: false } }] },
+    { hoja: 'PRESUPUESTOS', cols: ['rubro', 'importe', 'vigente_desde', 'validado_por', 'proyecto_id'] }] },
+  obras: { titulo: 'Obras', tabs: [
+    { hoja: 'OBRAS', cols: ['nombre', 'presupuesto', 'avance_fisico', 'fecha_fin_prevista', 'estado', 'proyecto_id'],
+      acciones: [{ t: 'Tablero físico / financiero / plazo', a: 'obras.tablero', id: 'obra_id', mostrar: mostrarTableroObra }] },
+    { hoja: 'ETAPAS_OBRA', cols: ['obra_id', 'orden', 'nombre', 'peso_porcentual', 'avance_certificado', 'fecha_fin_prevista', 'responsable'],
+      acciones: [{ t: 'Presentar certificación', a: 'obras.presentarCertificacion', id: 'etapa_id', campos: [['avance_porcentual', 'numero', 'Avance acumulado (%)'], ['profesional', 'texto', 'Profesional que certifica'], ['importe_certificado', 'moneda', 'Importe certificado'], ['documento_id', 'ref:DOCUMENTOS', 'Documento respaldatorio'], ['fotos', 'texto', 'Enlaces a fotos (Drive)'], ['observaciones', 'textarea', 'Observaciones']] }] },
+    { hoja: 'CERTIFICACIONES', cols: ['etapa_id', 'fecha', 'avance_porcentual', 'profesional', 'estado', 'aprobado_por'],
+      acciones: [
+        { t: 'Aprobar certificación', a: 'obras.decidirCertificacion', id: 'certificacion_id', si: function (r) { return r.estado === 'PRESENTADA'; }, campos: [['motivo', 'texto', 'Observación']], extra: { aprobar: true } },
+        { t: 'Rechazar', a: 'obras.decidirCertificacion', id: 'certificacion_id', si: function (r) { return r.estado === 'PRESENTADA'; }, campos: [['motivo', 'texto', 'Motivo']], extra: { aprobar: false } }] }] },
+  cesiones: { titulo: 'Cesiones y desvinculaciones', tabs: [
+    { hoja: 'CESIONES', cols: ['beneficiario_id', 'alternativa', 'fecha_solicitud', 'total_abonado', 'estado', 'decision', 'proyecto_id'],
+      acciones: [
+        { t: 'Avanzar etapa', a: 'cesiones.avanzar', id: 'cesion_id', campos: [['estado', 'enum', 'Estado', ['EN_ANALISIS', 'DOCUMENTACION_PRELIMINAR', 'PENDIENTE_DECISION', 'DESISTIDA']], ['responsable', 'texto', 'Responsable'], ['motivo', 'texto', 'Notas']] },
+        { t: 'Registrar cesionario potencial', a: 'cesiones.registrarCesionario', id: 'cesion_id', campos: [['nombre', 'texto', 'Nombre'], ['contacto_id', 'ref:CONTACTOS_CRM', 'Contacto CRM'], ['oferta', 'moneda', 'Oferta (ARS)'], ['observaciones', 'texto', 'Observaciones']] },
+        { t: 'Calcular escenario (reglas del contrato)', a: 'cesiones.calcularEscenario', id: 'cesion_id', campos: [['clausula', 'texto', 'Cláusula contractual de origen'], ['porcentaje_reintegro', 'numero', '% de reintegro'], ['penalidad_porcentual', 'numero', '% de penalidad'], ['gastos_administrativos', 'moneda', 'Gastos administrativos'], ['plazo', 'texto', 'Plazo de reintegro']], mostrar: 'objeto' },
+        { t: 'Generar documentación preliminar', a: 'cesiones.documentoPreliminar', id: 'cesion_id', mostrar: function (r) { return '<pre class="whitespace-pre-wrap text-sm bg-slate-50 dark:bg-slate-800 p-3 rounded">' + esc(r.texto) + '</pre><button class="boton-secundario mt-3" onclick="window.print()">Imprimir</button>'; } },
+        { t: 'Registrar decisión', a: 'cesiones.decidir', id: 'cesion_id', si: function (r) { return r.estado === 'PENDIENTE_DECISION'; }, campos: [['decision', 'enum', 'Decisión', ['APROBADA', 'RECHAZADA']], ['fundamento', 'textarea', 'Fundamento (obligatorio)']] },
+        { t: 'Formalizar (con instrumento firmado)', a: 'cesiones.formalizar', id: 'cesion_id', si: function (r) { return r.estado === 'APROBADA'; }, campos: [['documento_id', 'ref:DOCUMENTOS', 'Instrumento firmado'], ['nuevo_beneficiario_id', 'ref:BENEFICIARIOS', 'Cesionario existente (o completar datos)'], ['nuevo_nombre', 'texto', 'Nombre del cesionario'], ['nuevo_documento', 'texto', 'Documento del cesionario'], ['nuevo_email', 'texto', 'Email del cesionario'], ['importe_ingreso_cesion', 'moneda', 'Ingreso por cesión (si corresponde)'], ['importe_reintegro', 'moneda', 'Reintegro (resolución/reembolso)'], ['observaciones', 'texto', 'Observaciones']], mostrar: 'objeto' }] },
+    { hoja: 'DESVINCULACIONES', cols: ['beneficiario_id', 'tipo', 'fecha', 'importe_reintegro', 'aprobado_por', 'proyecto_id'] }] },
+  documentos: { titulo: 'Documentos', tabs: [
+    { hoja: 'DOCUMENTOS', cols: ['titulo', 'tipo', 'entidad', 'entidad_id', 'visible_beneficiario', 'url', 'proyecto_id'] },
+    { hoja: 'CONTRATOS', cols: ['tipo', 'parte_id', 'fecha_firma', 'estado', 'proyecto_id'] }] },
+  contenidos: { titulo: 'Fábrica de contenidos', herramientas: [{ t: 'Revisor jurídico de textos', a: 'contenidos.revisarTexto', conProyecto: true, campos: [['texto', 'textarea', 'Texto a revisar']], mostrar: mostrarRevision }],
+    tabs: [
+    { hoja: 'CONTENIDOS', cols: ['titulo', 'tema', 'formatos', 'estado', 'aprobado_por', 'proyecto_id'],
+      crear: { accion: 'contenidos.crear', campos: [['titulo', 'texto', 'Título'], ['tema', 'texto', 'Tema'], ['proyecto_id', 'ref:PROYECTOS', 'Fideicomiso asociado'], ['campania_id', 'ref:CAMPAÑAS', 'Campaña'], ['formatos', 'texto', 'Formatos (YOUTUBE_HORIZONTAL,SHORTS_VERTICAL,X,INSTAGRAM_REELS,FACEBOOK)']] },
+      acciones: [
+        { t: 'Cargar guion (se revisa automáticamente)', a: 'contenidos.guardarGuion', id: 'contenido_id', campos: [['texto', 'textarea', 'Guion'], ['formato', 'texto', 'Formato'], ['agente', 'texto', 'Origen (MANUAL, GUIONISTA vía Claude Code)']], mostrar: function (r) { return mostrarRevision(r.revision); } },
+        { t: 'Avanzar en el flujo de producción', a: 'contenidos.avanzar', id: 'contenido_id', campos: [['estado', 'enum', 'Siguiente etapa', ['INVESTIGACION', 'PLANIFICACION', 'GUION', 'GUION_APROBADO', 'AUDIO', 'IMAGENES', 'EDICION', 'SUBTITULOS', 'REVISION_TECNICA', 'PENDIENTE_APROBACION_FINAL']], ['audio_id', 'ref:AUDIOS', 'Audio'], ['video_id', 'ref:VIDEOS', 'Video'], ['portada_url', 'texto', 'URL portada'], ['subtitulos_url', 'texto', 'URL subtítulos'], ['motivo', 'texto', 'Notas / justificación']] },
+        { t: 'Aprobación final (SUPERADMIN)', a: 'contenidos.aprobarFinal', id: 'contenido_id', si: function (r) { return r.estado === 'PENDIENTE_APROBACION_FINAL'; }, campos: [['aprobar', 'bool', 'Aprobar (desmarcar para rechazar)'], ['motivo', 'texto', 'Motivo / observaciones']] },
+        { t: 'Programar publicación', a: 'publicaciones.programar', id: 'contenido_id', si: function (r) { return r.estado === 'APROBADO' || r.estado === 'PUBLICADO'; }, campos: [['plataforma', 'enum', 'Plataforma', ['YOUTUBE', 'YOUTUBE_SHORTS', 'X', 'INSTAGRAM', 'FACEBOOK']], ['fecha_programada', 'fechahora', 'Fecha y hora']] }] },
+    { hoja: 'GUIONES', cols: ['contenido_id', 'formato', 'agente', 'estado', 'revisado_por'] },
+    { hoja: 'AUDIOS', cols: ['contenido_id', 'archivo_url', 'motor_tts', 'duracion_seg'] },
+    { hoja: 'VIDEOS', cols: ['contenido_id', 'formato', 'archivo_url', 'duracion_seg', 'revisado_por'] },
+    { hoja: 'CAMPAÑAS', cols: ['nombre', 'objetivo', 'plataformas', 'fecha_inicio', 'fecha_fin'] }] },
+  publicaciones: { titulo: 'Calendario editorial', tabs: [
+    { hoja: 'PUBLICACIONES', cols: ['contenido_id', 'plataforma', 'fecha_programada', 'estado', 'fecha_publicada', 'enlace'], orden: 'fecha_programada',
+      acciones: [
+        { t: 'Registrar publicación realizada', a: 'publicaciones.registrarPublicada', id: 'publicacion_id', si: function (r) { return r.estado === 'PROGRAMADA'; }, campos: [['enlace', 'texto', 'Enlace https de la publicación']] },
+        { t: 'Cargar métricas', a: 'publicaciones.metricas', id: 'publicacion_id', campos: [['metricas', 'textarea', 'Métricas en JSON, ej: {"vistas":120,"me_gusta":8}']], preparar: function (d) { try { d.metricas = JSON.parse(d.metricas || '{}'); } catch (e) { throw { mensaje: 'JSON inválido' }; } return d; } }] }] },
+  agentes: { titulo: 'Centro de agentes', aviso: 'Los agentes "MANUAL_CLAUDE_CODE" se ejecutan por un operador con Claude Code (prompts en /agentes del repositorio). Los "LOCAL_GRATUITO" requieren una computadora local con tools/fabrica. Solo los "REGLAS_APPS_SCRIPT" funcionan en la nube. Ningún agente publica ni aprueba por sí mismo.',
+    tabs: [{ hoja: 'AGENTES', cols: ['codigo', 'nombre', 'modalidad', 'ejecuta_en', 'ultima_ejecucion'],
+      acciones: [{ t: 'Ejecutar / ver instrucciones', a: 'agentes.ejecutar', id: 'codigo', campoId: 'codigo', campos: [['texto', 'textarea', 'Texto de entrada (revisor / asesor comercial)']], mostrar: 'objeto' }] }] },
+  alertas: { titulo: 'Alertas', tabs: [{ hoja: 'ALERTAS', cols: ['creado_en', 'severidad', 'tipo', 'mensaje', 'estado', 'proyecto_id'], filtros: { estado: 'ABIERTA' },
+      acciones: [{ t: 'Resolver', a: 'alertas.resolver', id: 'alerta_id', si: function (r) { return r.estado === 'ABIERTA'; }, campos: [['motivo', 'texto', '¿Cómo se resolvió?']] }] },
+    { hoja: 'NOTIFICACIONES', cols: ['destinatario', 'canal', 'asunto', 'estado', 'enviada_en'] }] },
+  tareas: { titulo: 'Cola de tareas', herramientas: [{ t: 'Ejecutar trabajo ahora', a: 'sistema.ejecutarTrabajo', campos: [['tipo', 'enum', 'Trabajo', ['ACTUALIZAR_MORA', 'RECORDATORIO_CUOTAS', 'CONTROL_OBRAS', 'SEGUIMIENTO_OPORTUNIDADES', 'SEGUIMIENTO_CESIONES', 'INTEGRIDAD', 'RESPALDO', 'REPORTE_SEMANAL']]], mostrar: 'objeto' }],
+    tabs: [{ hoja: 'TAREAS', cols: ['tipo', 'estado', 'intentos', 'ultimo_error', 'creado_en'],
+      acciones: [
+        { t: 'Aprobar ejecución', a: 'tareas.aprobar', id: 'tarea_id', si: function (r) { return r.estado === 'REQUIERE_APROBACION'; } },
+        { t: 'Reintentar', a: 'tareas.reintentar', id: 'tarea_id', si: function (r) { return r.estado === 'ERROR'; } }] }] },
+  usuarios: { titulo: 'Usuarios y permisos', render: vistaUsuarios },
+  auditoria: { titulo: 'Auditoría', herramientas: [{ t: 'Verificar integridad y cadena de auditoría', a: 'integridad.verificar', mostrar: 'objeto' }],
+    tabs: [{ hoja: 'AUDITORIA', cols: ['creado_en', 'usuario', 'operacion', 'hoja', 'registro_id', 'motivo', 'resultado'] },
+      { hoja: 'PERMISOS', cols: ['rol', 'modulo', 'accion', 'permitido'] }] },
+  respaldos: { titulo: 'Copias de seguridad', herramientas: [{ t: 'Crear copia ahora', a: 'respaldos.crear', mostrar: 'objeto' }],
+    tabs: [{ hoja: 'COPIAS_SEGURIDAD', cols: ['creado_en', 'nombre', 'tipo', 'hojas', 'filas', 'estado', 'restaurado_en'],
+      acciones: [{ t: 'Restaurar desde esta copia', a: 'respaldos.restaurar', id: 'respaldo_id', si: function (r) { return r.estado === 'DISPONIBLE'; }, campos: [['hojas', 'texto', 'Hojas a restaurar separadas por coma (vacío = todas)'], ['motivo', 'texto', 'Motivo'], ['confirmacion', 'texto', 'Escriba RESTAURAR para confirmar']], preparar: function (d) { d.hojas = String(d.hojas || '').split(',').map(function (x) { return x.trim(); }).filter(String); return d; }, mostrar: 'objeto' }] }] },
+  configuracion: { titulo: 'Configuración', render: vistaConfiguracion },
+  portal: { titulo: 'Mi fideicomiso', render: vistaPortal }
+};
+
+// ---------- Arranque y sesión ----------
+var $ = function (id) { return document.getElementById(id); };
+function guardarToken(t) { SESION.token = t; try { t ? sessionStorage.setItem('pfi_t', t) : sessionStorage.removeItem('pfi_t'); } catch (e) {} }
+window.alExpirarSesion = function () { guardarToken(''); mostrarAcceso('formLogin'); aviso('Su sesión expiró. Ingrese nuevamente.', 'info'); };
+
+function mostrarAcceso(form) {
+  $('vistaApp').classList.add('hidden'); $('vistaAcceso').classList.remove('hidden');
+  ['formLogin', 'formOlvido', 'formReset', 'formCambio'].forEach(function (f) { $(f).classList.toggle('hidden', f !== form); });
+}
+
+function iniciar() {
+  var m = location.hash.match(/reset=([a-f0-9]{32,})/);
+  if (m) { ESTADO.resetToken = m[1]; history.replaceState(null, '', location.pathname + location.search); return mostrarAcceso('formReset'); }
+  var t = ''; try { t = sessionStorage.getItem('pfi_t') || ''; } catch (e) {}
+  if (!t) return mostrarAcceso('formLogin');
+  SESION.token = t;
+  cargarPerfil();
+}
+
+function cargarPerfil() {
+  llamar('auth.yo').then(function (r) {
+    SESION.usuario = r.usuario; SESION.menu = r.menu;
+    if (r.usuario.debe_cambiar_password) return mostrarAcceso('formCambio');
+    entrarApp();
+  }).catch(function (e) { mostrarAcceso('formLogin'); if (e.codigo !== 'SESION') aviso(e.mensaje, 'error'); });
+}
+
+$('formLogin').addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  var d = datosForm(this);
+  llamar('auth.login', d, { sinToken: true }).then(function (r) { guardarToken(r.token); cargarPerfil(); })
+    .catch(function (e) { aviso(e.mensaje, 'error'); });
+});
+$('lnkOlvido').onclick = function () { mostrarAcceso('formOlvido'); };
+Array.prototype.forEach.call(document.querySelectorAll('.volverLogin'), function (b) { b.onclick = function () { mostrarAcceso('formLogin'); }; });
+$('formOlvido').addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  llamar('auth.solicitarRecuperacion', datosForm(this), { sinToken: true }).then(function (r) { aviso(r.mensaje, 'ok'); mostrarAcceso('formLogin'); })
+    .catch(function (e) { aviso(e.mensaje, 'error'); });
+});
+$('formReset').addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  var d = datosForm(this);
+  if (d.password !== d.password2) return aviso('Las contraseñas no coinciden.', 'error');
+  llamar('auth.confirmarRecuperacion', { token: ESTADO.resetToken, password: d.password }, { sinToken: true })
+    .then(function () { aviso('Contraseña actualizada. Ya puede ingresar.', 'ok'); mostrarAcceso('formLogin'); })
+    .catch(function (e) { aviso(e.mensaje, 'error'); });
+});
+$('formCambio').addEventListener('submit', function (ev) {
+  ev.preventDefault();
+  var d = datosForm(this);
+  if (d.nueva !== d.nueva2) return aviso('Las contraseñas no coinciden.', 'error');
+  llamar('auth.cambiarPassword', { actual: d.actual, nueva: d.nueva }).then(function () { aviso('Contraseña actualizada.', 'ok'); this && this.reset && this.reset(); cargarPerfil(); })
+    .catch(function (e) { aviso(e.mensaje, 'error'); });
+});
+$('btnSalir').onclick = function () { llamar('auth.logout', { token: SESION.token }, { sinToken: true }).catch(function () {}); guardarToken(''); location.hash = ''; mostrarAcceso('formLogin'); };
+
+function entrarApp() {
+  $('vistaAcceso').classList.add('hidden'); $('vistaApp').classList.remove('hidden');
+  $('pieUsuario').innerHTML = esc(SESION.usuario.nombre) + '<br>' + esc(humano(SESION.usuario.rol));
+  $('menu').innerHTML = SESION.menu.map(function (m) {
+    return '<a href="#/' + esc(m.id) + '" data-vista="' + esc(m.id) + '" class="item-menu">' + esc(m.titulo) + '</a>';
+  }).join('');
+  var puedeFid = SESION.menu.some(function (m) { return m.id === 'fideicomisos'; });
+  if (puedeFid) {
+    llamar('datos.listar', { hoja: 'PROYECTOS', tamanio: 200 }).then(function (r) {
+      ESTADO.refs.PROYECTOS = {};
+      r.registros.forEach(function (p) { ESTADO.refs.PROYECTOS[p.id] = p.denominacion; });
+      $('filtroProyecto').innerHTML = '<option value="">Todos los fideicomisos</option>' + r.registros.map(function (p) {
+        return '<option value="' + esc(p.id) + '">' + esc(p.denominacion) + '</option>'; }).join('');
+      $('filtroProyecto').classList.remove('hidden');
+    }).catch(function () {});
+  }
+  route();
+}
+$('filtroProyecto').onchange = function () { ESTADO.proyecto = this.value; route(); };
+$('btnSidebar').onclick = function () { $('sidebar').classList.remove('-translate-x-full'); $('velo').classList.remove('hidden'); };
+$('velo').onclick = cerrarSidebar;
+function cerrarSidebar() { $('sidebar').classList.add('-translate-x-full'); $('velo').classList.add('hidden'); }
+window.addEventListener('hashchange', function () { if (SESION.usuario) route(); });
+
+function route() {
+  cerrarSidebar();
+  var id = (location.hash.match(/^#\/([a-z]+)/) || [])[1];
+  var permitidos = SESION.menu.map(function (m) { return m.id; });
+  if (!id || permitidos.indexOf(id) < 0) id = permitidos[0];
+  ESTADO.vista = id;
+  Array.prototype.forEach.call(document.querySelectorAll('.item-menu'), function (a) { a.classList.toggle('activo', a.getAttribute('data-vista') === id); });
+  var v = V[id];
+  $('tituloVista').textContent = v ? v.titulo : '';
+  var c = $('contenido');
+  c.innerHTML = '<p class="text-slate-500">Cargando…</p>';
+  if (!v) { c.innerHTML = '<p>Vista no disponible.</p>'; return; }
+  if (v.render) return v.render(c);
+  vistaModulo(c, v);
+}
+
+// ---------- Vista genérica de módulo ----------
+function esquema(hoja) {
+  if (ESTADO.esquemas[hoja]) return Promise.resolve(ESTADO.esquemas[hoja]);
+  return llamar('datos.esquema', { hoja: hoja }).then(function (e) { ESTADO.esquemas[hoja] = e; return e; });
+}
+
+function vistaModulo(c, v) {
+  var html = '';
+  if (v.aviso) html += '<div class="nota">' + esc(v.aviso) + '</div>';
+  if (v.herramientas) html += '<div class="flex flex-wrap gap-2">' + v.herramientas.map(function (h, i) {
+    return '<button class="boton-secundario" data-herr="' + i + '">' + esc(h.t) + '</button>'; }).join('') + '</div>';
+  if (v.tabs.length > 1) html += '<div class="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" role="tablist">' + v.tabs.map(function (t, i) {
+    return '<button role="tab" class="pestana' + (i === 0 ? ' activa' : '') + '" data-tab="' + i + '">' + esc(t.titulo || humano(t.hoja)) + '</button>'; }).join('') + '</div>';
+  html += '<div id="zonaTab"></div>';
+  c.innerHTML = html;
+  Array.prototype.forEach.call(c.querySelectorAll('[data-herr]'), function (b) {
+    b.onclick = function () { abrirAccion(v.herramientas[+b.getAttribute('data-herr')], null); };
+  });
+  Array.prototype.forEach.call(c.querySelectorAll('[data-tab]'), function (b) {
+    b.onclick = function () {
+      Array.prototype.forEach.call(c.querySelectorAll('[data-tab]'), function (x) { x.classList.remove('activa'); });
+      b.classList.add('activa'); renderTab(v.tabs[+b.getAttribute('data-tab')]);
+    };
+  });
+  renderTab(v.tabs[0]);
+}
+
+function renderTab(tab, opciones) {
+  opciones = opciones || { pagina: 1, busqueda: '' };
+  var z = $('zonaTab');
+  esquema(tab.hoja).then(function (esq) {
+    var puedeCrear = tab.crear || (!esq.soloLectura && !esq.crearPorServicio);
+    z.innerHTML = '<div class="flex flex-wrap gap-2 items-center my-4">' +
+      '<input id="busqueda" type="search" placeholder="Buscar…" class="flex-1 min-w-[12rem]" value="' + esc(opciones.busqueda) + '">' +
+      (puedeCrear ? '<button id="btnNuevo" class="boton-primario">Nuevo</button>' : '') +
+      '<button id="btnExportar" class="boton-secundario">Exportar CSV</button></div><div id="tabla" class="tarjeta p-0 overflow-x-auto"></div><div id="paginacion" class="flex justify-between items-center text-sm mt-3"></div>';
+    var buscar = $('busqueda'), t;
+    buscar.oninput = function () { clearTimeout(t); t = setTimeout(function () { renderTab(tab, { pagina: 1, busqueda: buscar.value }); }, 350); };
+    if (puedeCrear) $('btnNuevo').onclick = function () { abrirFormulario(tab, esq, null); };
+    $('btnExportar').onclick = function () {
+      llamar('datos.exportar', { hoja: tab.hoja, proyecto_id: ESTADO.proyecto }).then(function (r) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob(['﻿' + r.contenido], { type: 'text/csv;charset=utf-8' }));
+        a.download = r.nombre; a.click();
+      }).catch(function (e) { aviso(e.mensaje, 'error'); });
+    };
+    var filtros = tab.filtros || {};
+    return llamar('datos.listar', { hoja: tab.hoja, pagina: opciones.pagina, tamanio: 25, busqueda: opciones.busqueda,
+      proyecto_id: tab.hoja === 'PROYECTOS' ? '' : ESTADO.proyecto, estado: filtros.estado || '', filtros: filtros, orden: tab.orden || 'creado_en' })
+      .then(function (r) { pintarTabla(tab, esq, r, opciones); });
+  }).catch(function (e) { z.innerHTML = '<p class="text-red-600">' + esc(e.mensaje) + '</p>'; });
+}
+
+function pintarTabla(tab, esq, r, opciones) {
+  var cols = (tab.cols || esq.columnas.slice(0, 6).map(function (c) { return c.nombre; }));
+  var defs = {}; esq.columnas.forEach(function (c) { defs[c.nombre] = c; });
+  ESTADO.registros = {};
+  r.registros.forEach(function (x) { ESTADO.registros[x.id] = x; });
+  var html = '<table class="tabla"><thead><tr>' + cols.map(function (c) { return '<th>' + esc(etiqueta(c)) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  if (!r.registros.length) html += '<tr><td colspan="' + cols.length + '" class="text-center text-slate-500 py-8">Sin registros.</td></tr>';
+  r.registros.forEach(function (x) {
+    html += '<tr class="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/60" data-id="' + esc(x.id) + '" tabindex="0">' +
+      cols.map(function (c) { return '<td>' + formatear(defs[c], x[c]) + '</td>'; }).join('') + '</tr>';
+  });
+  $('tabla').innerHTML = html + '</tbody></table>';
+  Array.prototype.forEach.call($('tabla').querySelectorAll('tr[data-id]'), function (tr) {
+    var abrir = function () { abrirDetalle(tab, esq, ESTADO.registros[tr.getAttribute('data-id')]); };
+    tr.onclick = abrir; tr.onkeydown = function (e) { if (e.key === 'Enter') abrir(); };
+  });
+  var paginas = Math.max(1, Math.ceil(r.total / r.tamanio));
+  $('paginacion').innerHTML = '<span class="text-slate-500">' + r.total + ' registro(s)</span><span class="flex gap-2">' +
+    '<button class="boton-secundario" ' + (r.pagina <= 1 ? 'disabled' : '') + ' id="pagAnt">Anterior</button>' +
+    '<span class="px-2 py-1">' + r.pagina + ' / ' + paginas + '</span>' +
+    '<button class="boton-secundario" ' + (r.pagina >= paginas ? 'disabled' : '') + ' id="pagSig">Siguiente</button></span>';
+  $('pagAnt').onclick = function () { renderTab(tab, { pagina: r.pagina - 1, busqueda: opciones.busqueda }); };
+  $('pagSig').onclick = function () { renderTab(tab, { pagina: r.pagina + 1, busqueda: opciones.busqueda }); };
+  cargarEtiquetasRef(esq, cols);
+}
+
+/** Resuelve ids de referencias a nombres legibles (una consulta por hoja referida). */
+function cargarEtiquetasRef(esq, cols) {
+  esq.columnas.filter(function (c) { return c.tipo === 'ref' && cols.indexOf(c.nombre) >= 0 && !ESTADO.refs[c.ref]; }).forEach(function (c) {
+    ESTADO.refs[c.ref] = {};
+    llamar('datos.listar', { hoja: c.ref, tamanio: 200 }).then(function (r) {
+      r.registros.forEach(function (x) { ESTADO.refs[c.ref][x.id] = x.denominacion || x.nombre || x.titulo || x.codigo || x.razon_social || x.ubicacion || x.id; });
+    }).catch(function () {});
+  });
+}
+
+function panel(titulo, html) {
+  $('panelTitulo').textContent = titulo; $('panelCuerpo').innerHTML = html; $('panel').classList.remove('hidden');
+}
+function cerrarPanel() { $('panel').classList.add('hidden'); }
+Array.prototype.forEach.call(document.querySelectorAll('[data-cerrar]'), function (b) { b.onclick = cerrarPanel; });
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrarPanel(); });
+
+function abrirDetalle(tab, esq, r) {
+  var acciones = (tab.acciones || []).filter(function (a) { return !a.si || a.si(r); });
+  var html = '<dl class="grid grid-cols-3 gap-x-3 gap-y-2 text-sm">' + esq.columnas.filter(function (c) { return c.nombre !== 'huella'; }).map(function (c) {
+    var v = r[c.nombre];
+    var val = (c.tipo === 'json' || c.tipo === 'texto') && String(v || '').length > 80 ? '<pre class="whitespace-pre-wrap text-xs">' + esc(c.tipo === 'json' ? bonito(v) : v) + '</pre>' : formatear(c, v);
+    return '<dt class="text-slate-500">' + esc(etiqueta(c.nombre)) + '</dt><dd class="col-span-2 break-words">' + val + '</dd>';
+  }).join('') + '</dl><div class="mt-6 flex flex-wrap gap-2">';
+  if (!esq.soloLectura) html += '<button class="boton-secundario" id="btnEditar">Editar</button><button class="boton-secundario text-red-700" id="btnAnular">Anular</button>';
+  acciones.forEach(function (a, i) { html += '<button class="boton-primario" data-acc="' + i + '">' + esc(a.t) + '</button>'; });
+  panel(humano(tab.hoja) + ' · ' + (r.denominacion || r.nombre || r.titulo || r.codigo || r.id), html + '</div>');
+  if (!esq.soloLectura) {
+    $('btnEditar').onclick = function () { abrirFormulario(tab, esq, r); };
+    $('btnAnular').onclick = function () {
+      var motivo = prompt('Motivo de la anulación (queda registrado en auditoría):');
+      if (!motivo) return;
+      llamar('datos.anular', { hoja: tab.hoja, id: r.id, motivo: motivo }).then(function () { aviso('Registro anulado.', 'ok'); cerrarPanel(); renderTab(tab); })
+        .catch(function (e) { aviso(e.mensaje, 'error'); });
+    };
+  }
+  Array.prototype.forEach.call($('panelCuerpo').querySelectorAll('[data-acc]'), function (b) {
+    b.onclick = function () { abrirAccion(acciones[+b.getAttribute('data-acc')], r, tab); };
+  });
+}
+function bonito(v) { try { return JSON.stringify(JSON.parse(v), null, 2); } catch (e) { return v; } }
+
+// ---------- Formularios ----------
+function campoHtml(nombre, tipo, etiq, opciones, valor) {
+  var id = 'f_' + nombre, v = valor === undefined || valor === null ? '' : valor;
+  if (tipo === 'bool') return '<label class="flex items-center gap-2 text-sm"><input type="checkbox" class="w-auto" name="' + esc(nombre) + '"' + (v ? ' checked' : '') + '> ' + esc(etiq) + '</label>';
+  var control;
+  if (tipo === 'enum') control = '<select id="' + id + '" name="' + esc(nombre) + '"><option value=""></option>' + (opciones || []).map(function (o) {
+    return '<option value="' + esc(o) + '"' + (o === v ? ' selected' : '') + '>' + esc(humano(o)) + '</option>'; }).join('') + '</select>';
+  else if (/^ref:/.test(tipo)) control = '<select id="' + id + '" name="' + esc(nombre) + '" data-ref="' + esc(tipo.slice(4)) + '" data-valor="' + esc(v) + '"><option value="">— cargando —</option></select>';
+  else if (tipo === 'textarea' || tipo === 'json') control = '<textarea id="' + id + '" name="' + esc(nombre) + '" rows="4">' + esc(tipo === 'json' ? bonito(v) : v) + '</textarea>';
+  else {
+    var t = { numero: 'number', moneda: 'number', fecha: 'date', fechahora: 'datetime-local', email: 'email', telefono: 'tel', password: 'password' }[tipo] || 'text';
+    var extra = tipo === 'moneda' ? ' step="0.01" min="0"' : tipo === 'numero' ? ' step="any"' : '';
+    if (t === 'datetime-local' && v) v = String(v).slice(0, 16);
+    control = '<input id="' + id + '" type="' + t + '" name="' + esc(nombre) + '" value="' + esc(v) + '"' + extra + '>';
+  }
+  return '<label class="campo" for="' + id + '">' + esc(etiq) + control + '</label>';
+}
+
+function poblarRefs(cont) {
+  Array.prototype.forEach.call(cont.querySelectorAll('select[data-ref]'), function (s) {
+    var hoja = s.getAttribute('data-ref'), valor = s.getAttribute('data-valor');
+    var filtro = hoja !== 'PROYECTOS' && ESTADO.proyecto ? ESTADO.proyecto : '';
+    llamar('datos.listar', { hoja: hoja, tamanio: 200, proyecto_id: filtro }).then(function (r) {
+      s.innerHTML = '<option value=""></option>' + r.registros.map(function (x) {
+        var et = x.denominacion || x.nombre || x.titulo || x.codigo || x.razon_social || x.ubicacion || x.id;
+        return '<option value="' + esc(x.id) + '"' + (x.id === valor ? ' selected' : '') + '>' + esc(et) + ' · ' + esc(x.id.slice(-6)) + '</option>';
+      }).join('');
+      if (hoja === 'PROYECTOS' && !valor && ESTADO.proyecto) s.value = ESTADO.proyecto;
+    }).catch(function () { s.innerHTML = '<option value="">(sin acceso)</option>'; });
+  });
+}
+
+var CAMPOS_TECNICOS = ['id', 'creado_en', 'actualizado_en', 'usuario_responsable', 'version', 'huella', 'es_prueba'];
+
+function abrirFormulario(tab, esq, r) {
+  var campos;
+  if (!r && tab.crear && tab.crear.campos) campos = tab.crear.campos;
+  else campos = esq.columnas.filter(function (c) { return CAMPOS_TECNICOS.indexOf(c.nombre) < 0 && esq.camposBloqueados.indexOf(c.nombre) < 0; })
+    .map(function (c) {
+      var tipo = c.tipo === 'ref' ? 'ref:' + c.ref : c.tipo === 'texto' && /observ|descrip|mensaje|texto|objeto|condicion|reglas|motivo/.test(c.nombre) ? 'textarea' : c.tipo;
+      return [c.nombre, tipo, etiqueta(c.nombre), c.opciones];
+    });
+  var html = '<form id="formRegistro" class="space-y-3">' + campos.map(function (c) { return campoHtml(c[0], c[1], c[2], c[3], r ? r[c[0]] : ''); }).join('') +
+    '<button class="boton-primario w-full">' + (r ? 'Guardar cambios' : 'Crear') + '</button></form>';
+  panel((r ? 'Editar ' : 'Nuevo · ') + humano(tab.hoja), html);
+  var f = $('formRegistro'); poblarRefs(f);
+  var idem = idemKey();
+  f.onsubmit = function (ev) {
+    ev.preventDefault();
+    var d = datosForm(f);
+    Object.keys(d).forEach(function (k) { if (d[k] === '' && !r) delete d[k]; });
+    var p = r ? llamar('datos.actualizar', { hoja: tab.hoja, id: r.id, version: r.version, cambios: d, motivo: 'Edición desde el panel' })
+      : tab.crear ? llamar(tab.crear.accion, d, { idempotencia: idem }) : llamar('datos.crear', { hoja: tab.hoja, registro: d }, { idempotencia: idem });
+    p.then(function () { aviso('Guardado.', 'ok'); cerrarPanel(); renderTab(tab); }).catch(function (e) { aviso(e.mensaje, 'error'); });
+  };
+}
+
+/** Acción específica (con o sin registro). */
+function abrirAccion(a, r, tab) {
+  var campos = a.campos || [];
+  var ejecutar = function (d) {
+    d = d || {};
+    if (r) d[a.id] = a.campoId ? r[a.campoId] : r.id;
+    if (a.conProyecto) { d.proyecto_id = d.proyecto_id || (r && r.proyecto_id) || ESTADO.proyecto; if (a.requiereProyecto && !d.proyecto_id) return aviso('Seleccione un fideicomiso en el filtro superior.', 'error'); }
+    Object.keys(a.extra || {}).forEach(function (k) { d[k] = a.extra[k]; });
+    try { if (a.preparar) d = a.preparar(d); } catch (e) { return aviso(e.mensaje || String(e), 'error'); }
+    llamar(a.a, d, { idempotencia: a.idem ? idemKey() : '' }).then(function (res) {
+      if (a.mostrar) panel(a.t, typeof a.mostrar === 'function' ? a.mostrar(res) : a.mostrar === 'tabla' ? tablaSimple(res) : objetoHtml(res));
+      else { aviso('Operación registrada.', 'ok'); cerrarPanel(); }
+      if (tab) renderTab(tab);
+    }).catch(function (e) { aviso(e.mensaje, 'error'); });
+  };
+  if (!campos.length) return ejecutar({});
+  var html = '<form id="formAccion" class="space-y-3">' + campos.map(function (c) { return campoHtml(c[0], c[1], c[2], c[3], c[1] === 'bool' && c[0] === 'aprobar' ? true : ''); }).join('') +
+    '<button class="boton-primario w-full">' + esc(a.t) + '</button></form>';
+  panel(a.t, html);
+  var f = $('formAccion'); poblarRefs(f);
+  f.onsubmit = function (ev) { ev.preventDefault(); var d = datosForm(f); Object.keys(d).forEach(function (k) { if (d[k] === '') delete d[k]; }); ejecutar(d); };
+}
+
+function objetoHtml(o) {
+  if (o === null || o === undefined) return '<p>Sin datos.</p>';
+  if (typeof o !== 'object') return '<p>' + esc(o) + '</p>';
+  if (Array.isArray(o)) return tablaSimple(o);
+  return '<dl class="space-y-2 text-sm">' + Object.keys(o).map(function (k) {
+    var v = o[k];
+    var val = v && typeof v === 'object' ? (Array.isArray(v) && v.length && typeof v[0] === 'object' ? tablaSimple(v) : '<pre class="whitespace-pre-wrap text-xs bg-slate-50 dark:bg-slate-800 p-2 rounded">' + esc(JSON.stringify(v, null, 2)) + '</pre>') : esc(v);
+    return '<div><dt class="text-slate-500">' + esc(etiqueta(k)) + '</dt><dd>' + val + '</dd></div>';
+  }).join('') + '</dl>';
+}
+
+function tablaSimple(lista) {
+  if (!lista || !lista.length) return '<p class="text-slate-500">Sin datos.</p>';
+  var cols = Object.keys(lista[0]).filter(function (c) { return CAMPOS_TECNICOS.indexOf(c) < 0 || c === 'id'; }).slice(0, 8);
+  return '<div class="overflow-x-auto"><table class="tabla"><thead><tr>' + cols.map(function (c) { return '<th>' + esc(etiqueta(c)) + '</th>'; }).join('') +
+    '</tr></thead><tbody>' + lista.map(function (x) {
+      return '<tr>' + cols.map(function (c) {
+        var v = x[c];
+        var tipo = /importe|saldo|pagado|monto/.test(c) ? 'moneda' : /fecha|vencimiento/.test(c) ? 'fecha' : 'texto';
+        return '<td>' + (v && typeof v === 'object' ? esc(JSON.stringify(v)) : formatear({ nombre: c, tipo: tipo }, v)) + '</td>'; }).join('') + '</tr>';
+    }).join('') + '</tbody></table></div>';
+}
+
+// ---------- Presentaciones específicas ----------
+function kpi(titulo, valor, nota) {
+  return '<div class="tarjeta"><p class="text-xs uppercase tracking-wide text-slate-500">' + esc(titulo) + '</p><p class="text-2xl font-semibold mt-1 tabular-nums">' + valor + '</p>' + (nota ? '<p class="text-xs text-slate-500 mt-1">' + esc(nota) + '</p>' : '') + '</div>';
+}
+function barra(pct, color) { pct = Math.max(0, Math.min(100, Number(pct) || 0)); return '<div class="barra"><div class="' + (color || '') + '" style="width:' + pct + '%"></div></div>'; }
+
+function vistaDashboard(c) {
+  c.innerHTML = '<form id="filtrosDash" class="flex flex-wrap gap-2 items-end"><label class="campo">Desde<input type="date" name="desde"></label><label class="campo">Hasta<input type="date" name="hasta"></label><button class="boton-secundario">Aplicar</button></form><div id="dash"></div>';
+  var cargar = function () {
+    var d = datosForm($('filtrosDash')); d.proyecto_id = ESTADO.proyecto;
+    llamar('dashboard.indicadores', d).then(function (k) {
+      var g = k.globales;
+      var html = '<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">' +
+        kpi('Terrenos captados', g.terrenos_captados, g.terrenos_en_evaluacion + ' en evaluación') +
+        kpi('Fideicomisos activos', g.fideicomisos_activos, g.proyectos_en_preparacion + ' en preparación · ' + g.proyectos_en_ejecucion + ' en ejecución') +
+        kpi('Beneficiarios activos', g.beneficiarios_activos) +
+        kpi('Contactos comerciales', g.contactos_comerciales, 'Conversión ' + g.conversion_comercial_pct + '%') +
+        kpi('Solicitudes de cesión', g.solicitudes_cesion) + kpi('Solicitudes de desvinculación', g.solicitudes_desvinculacion) +
+        kpi('Contenidos por aprobar', g.contenidos_pendientes_aprobacion) + kpi('Alertas críticas abiertas', g.alertas_criticas_abiertas) + '</div>';
+      html += '<div class="tarjeta p-0 overflow-x-auto"><div class="p-4 pb-0"><h3 class="font-semibold">Por fideicomiso</h3><p class="text-xs text-slate-500">' + esc(k.aviso) + '</p></div><table class="tabla mt-2"><thead><tr><th>Fideicomiso</th><th>Estado</th><th>Aportes prelim.</th><th>Cuotas emitidas</th><th>Cobradas</th><th>Pendientes</th><th>Morosidad</th><th>Gastos</th><th>Saldo</th><th>Avance físico</th><th>Avance financiero</th></tr></thead><tbody>' +
+        (k.porFideicomiso.length ? k.porFideicomiso.map(function (f) {
+          return '<tr><td class="font-medium">' + esc(f.denominacion) + '</td><td>' + badge(f.estado) + '</td><td>' + moneda(f.aportes_preliminares) + '</td><td>' + moneda(f.cuotas_emitidas) +
+            '</td><td>' + moneda(f.cuotas_cobradas) + '</td><td>' + moneda(f.cuotas_pendientes) + '</td><td>' + esc(f.morosidad_pct) + '%</td><td>' + moneda(f.gastos_ejecutados) +
+            '</td><td class="font-semibold">' + moneda(f.saldo) + '</td><td>' + barra(f.avance_fisico) + '<span class="text-xs">' + esc(f.avance_fisico) + '%</span></td><td>' + barra(f.avance_financiero, 'bg-acento') + '<span class="text-xs">' + esc(f.avance_financiero) + '%</span></td></tr>';
+        }).join('') : '<tr><td colspan="11" class="text-center text-slate-500 py-6">Sin fideicomisos.</td></tr>') + '</tbody></table></div>';
+      html += '<div class="tarjeta"><h3 class="font-semibold mb-3">Embudo comercial</h3>' + mostrarEmbudo({ porEtapa: k.embudo }) + '</div>';
+      $('dash').innerHTML = '<div class="space-y-6">' + html + '</div>';
+    }).catch(function (e) { $('dash').innerHTML = '<p class="text-red-600">' + esc(e.mensaje) + '</p>'; });
+  };
+  $('filtrosDash').onsubmit = function (e) { e.preventDefault(); cargar(); };
+  cargar();
+}
+
+function mostrarEmbudo(r) {
+  var max = Math.max.apply(null, Object.keys(r.porEtapa).map(function (k) { return r.porEtapa[k]; }).concat([1]));
+  return '<div class="space-y-1.5 text-sm">' + Object.keys(r.porEtapa).map(function (k) {
+    return '<div class="grid grid-cols-[10rem_1fr_2.5rem] items-center gap-2"><span class="truncate">' + esc(humano(k)) + '</span>' + barra(r.porEtapa[k] * 100 / max) + '<span class="text-right tabular-nums">' + esc(r.porEtapa[k]) + '</span></div>';
+  }).join('') + '</div>' + (r.conversion !== undefined ? '<p class="mt-3 text-sm">Conversión: <b>' + esc(r.conversion) + '%</b> de ' + esc(r.total) + ' oportunidades.</p>' : '');
+}
+
+function mostrarResumenFideicomiso(r) {
+  return '<h4 class="font-semibold">' + esc(r.fideicomiso.denominacion) + ' ' + badge(r.fideicomiso.estado) + '</h4>' +
+    '<p class="text-sm mt-2">Transiciones posibles: ' + (r.transiciones.map(humano).map(esc).join(', ') || 'ninguna') + '</p>' +
+    '<h5 class="font-semibold mt-4 mb-2">Habilitación comercial</h5><ul class="space-y-1 text-sm">' + r.requisitos.map(function (q) {
+      return '<li>' + (q.cumplido ? '✅' : '⬜') + ' ' + esc(q.etiqueta) + '</li>'; }).join('') + '</ul>' + mostrarSaldo(r.saldo);
+}
+function mostrarSaldo(s) {
+  return '<div class="mt-4 tarjeta"><p class="text-sm text-slate-500">Saldo del fideicomiso</p><p class="text-2xl font-semibold">' + moneda(s.saldo) + '</p><p class="text-xs text-slate-500">Ingresos ' + moneda(s.ingresos) + ' · Egresos ' + moneda(s.egresos) + '</p>' +
+    '<ul class="text-sm mt-3">' + Object.keys(s.porTipo).map(function (k) { return '<li class="flex justify-between"><span>' + esc(humano(k)) + '</span><span class="tabular-nums">' + moneda(s.porTipo[k]) + '</span></li>'; }).join('') + '</ul></div>';
+}
+function mostrarEstadoCuenta(r) {
+  var t = r.totales;
+  return '<div class="grid grid-cols-2 gap-3">' + kpi('Emitido', moneda(t.emitido)) + kpi('Pagado', moneda(t.pagado)) + kpi('Saldo', moneda(t.saldo)) + kpi('Vencido', moneda(t.vencido)) + '</div>' +
+    '<h5 class="font-semibold mt-4">Cuotas</h5>' + tablaSimple(r.cuotas.map(function (c) { return { numero: c.numero, vencimiento: c.vencimiento, importe: c.importe, pagado: c.pagado, saldo: c.saldo, estado: c.estado }; })) +
+    '<h5 class="font-semibold mt-4">Pagos</h5>' + tablaSimple(r.pagos.map(function (p) { return { fecha: p.fecha, importe: p.importe, estado: p.estado, referencia: p.referencia_bancaria }; }));
+}
+function mostrarLegajo(r) {
+  return '<h4 class="font-semibold text-lg">' + esc(r.beneficiario.nombre) + '</h4><p class="text-sm text-slate-500">' + esc(r.fideicomiso ? r.fideicomiso.denominacion : '') + ' · Unidad ' + esc(r.unidad ? r.unidad.codigo : '—') + ' · Portal: ' + (r.tiene_usuario_portal ? 'habilitado' : 'sin usuario') + '</p>' +
+    mostrarEstadoCuenta(r.cuenta) + '<h5 class="font-semibold mt-4">Documentos</h5>' + tablaSimple(r.documentos.map(function (d) { return { titulo: d.titulo, tipo: d.tipo, estado: d.estado }; })) +
+    '<h5 class="font-semibold mt-4">Solicitudes</h5>' + tablaSimple(r.solicitudes.map(function (s) { var p = JSON.parse(s.payload || '{}'); return { asunto: p.asunto, estado: s.estado, fecha: s.creado_en }; })) +
+    '<h5 class="font-semibold mt-4">Cesiones / salidas</h5>' + tablaSimple(r.cesiones.map(function (c) { return { alternativa: c.alternativa, estado: c.estado, fecha: c.fecha_solicitud }; }));
+}
+function mostrarRecibo(r) {
+  return '<div id="recibo" class="border border-slate-300 rounded-lg p-5 text-sm space-y-1"><p class="text-lg font-semibold">' + esc(r.emisor) + '</p><p>RECIBO N° <b>' + esc(r.numero) + '</b></p>' +
+    '<p>Fideicomiso: ' + esc(r.fideicomiso) + '</p><p>Recibimos de <b>' + esc(r.beneficiario) + '</b> (Doc. ' + esc(r.documento) + ') la suma de <b>' + esc(moneda(r.importe)) + '</b></p>' +
+    '<p>Fecha de pago: ' + esc(r.fecha) + ' · Medio: ' + esc(r.medio) + ' · Ref.: ' + esc(r.referencia) + '</p><p>Verificado por ' + esc(r.verificado_por) + ' el ' + esc(r.fecha_verificacion) + '</p>' +
+    '<p class="text-xs text-slate-500 mt-3">Aplicación: ' + r.aplicacion.map(function (a) { return esc(a.cuota_id) + ' ' + esc(moneda(a.monto)); }).join(' · ') + '</p></div>' +
+    '<button class="boton-secundario mt-3" onclick="window.print()">Imprimir / guardar PDF</button>';
+}
+function mostrarTableroObra(t) {
+  return '<h4 class="font-semibold">' + esc(t.obra.nombre) + '</h4><div class="space-y-3 mt-3 text-sm">' +
+    '<div>Avance físico certificado ' + barra(t.avance_fisico) + esc(t.avance_fisico) + '%</div>' +
+    '<div>Avance financiero (ejecutado / presupuesto) ' + barra(t.avance_financiero, 'bg-acento') + esc(t.avance_financiero) + '%</div>' +
+    '<div>Plazo transcurrido ' + barra(t.avance_temporal, 'gris') + esc(t.avance_temporal) + '% · restan ' + esc(t.plazo_restante_dias) + ' días</div></div>' +
+    '<div class="grid grid-cols-2 gap-3 mt-4">' + kpi('Presupuesto', moneda(t.presupuesto)) + kpi('Ejecutado', moneda(t.ejecutado)) + kpi('Disponible del presupuesto', moneda(t.disponible_presupuesto)) + kpi('Recaudación por cuotas', moneda(t.recaudacion)) + '</div>' +
+    '<h5 class="font-semibold mt-4">Etapas</h5>' + tablaSimple(t.etapas.map(function (e) { return { orden: e.orden, nombre: e.nombre, peso: e.peso_porcentual + '%', avance: (e.avance_certificado || 0) + '%', fecha_fin_prevista: e.fecha_fin_prevista }; }));
+}
+function mostrarProyeccion(p) {
+  var claves = Object.keys(p).sort();
+  var max = Math.max.apply(null, claves.map(function (k) { return p[k]; }).concat([1]));
+  return '<div class="space-y-1.5 text-sm">' + claves.map(function (k) { return '<div class="grid grid-cols-[6rem_1fr_8rem] gap-2 items-center"><span>' + esc(k === 'VENCIDO' ? 'Vencido' : k) + '</span>' + barra(p[k] * 100 / max) + '<span class="text-right tabular-nums">' + moneda(p[k]) + '</span></div>'; }).join('') + '</div>';
+}
+function prepararExtracto(d) {
+  d.extracto = String(d.extracto || '').split(/\n/).map(function (l) { return l.trim(); }).filter(String).map(function (l) {
+    var p = l.split(/[;\t]/); return { fecha: (p[0] || '').trim(), importe: Number(String(p[1] || '').replace(/\./g, '').replace(',', '.')), referencia: (p[2] || '').trim() };
+  });
+  if (!d.extracto.length) throw { mensaje: 'Pegue al menos una línea.' };
+  return d;
+}
+function mostrarConciliacion(r) {
+  return '<p class="nota">Son sugerencias. Cada pago debe verificarse y acreditarse individualmente.</p>' + tablaSimple(r.map(function (x) {
+    return { fecha: x.linea.fecha, importe: x.linea.importe, referencia: x.linea.referencia, pago_sugerido: x.sugerencia ? x.sugerencia.pago_id : '—', confianza: x.sugerencia ? x.sugerencia.confianza + '%' : '—' }; }));
+}
+function mostrarRevision(r) {
+  return '<p class="mb-2">' + (r.apto ? '<span class="text-emerald-700 font-semibold">Sin observaciones críticas.</span>' : '<span class="text-red-700 font-semibold">' + esc(r.criticas) + ' observación(es) crítica(s).</span>') + '</p>' +
+    tablaSimple(r.hallazgos) + '<p class="text-xs text-slate-500 mt-3">' + esc(r.aviso) + '</p>';
+}
+
+// ---------- Usuarios ----------
+var ROLES_UI = ['ADMINISTRADOR', 'ADMINISTRADOR_PROYECTO', 'CONTADOR', 'ASESOR_COMERCIAL', 'ASESOR_JURIDICO', 'RESPONSABLE_OBRA', 'ATENCION_BENEFICIARIO', 'BENEFICIARIO', 'SUPERADMIN'];
+function vistaUsuarios(c) {
+  llamar('usuarios.listar').then(function (lista) {
+    c.innerHTML = '<div class="flex justify-end"><button class="boton-primario" id="btnNuevoUsuario">Nuevo usuario</button></div><div class="tarjeta p-0 overflow-x-auto"><table class="tabla"><thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th></th></tr></thead><tbody>' +
+      lista.map(function (u) { return '<tr><td>' + esc(u.nombre) + '</td><td>' + esc(u.email) + '</td><td>' + esc(humano(u.rol)) + '</td><td>' + badge(u.estado) + '</td><td>' + esc(fecha(u.ultimo_acceso)) + '</td><td class="text-right whitespace-nowrap"><button class="boton-secundario" data-ed="' + esc(u.id) + '">Editar</button> <button class="boton-secundario" data-rs="' + esc(u.id) + '">Resetear clave</button></td></tr>'; }).join('') + '</tbody></table></div>';
+    var porId = {}; lista.forEach(function (u) { porId[u.id] = u; });
+    $('btnNuevoUsuario').onclick = function () {
+      panel('Nuevo usuario', '<form id="fu" class="space-y-3">' + campoHtml('nombre', 'texto', 'Nombre') + campoHtml('email', 'email', 'Email') + campoHtml('rol', 'enum', 'Rol', ROLES_UI) +
+        campoHtml('proyectos_asignados', 'texto', 'Fideicomisos asignados (ids separados por coma; para roles por proyecto)') + campoHtml('beneficiario_id', 'ref:BENEFICIARIOS', 'Legajo (solo rol BENEFICIARIO)') +
+        '<button class="boton-primario w-full">Crear</button></form>');
+      poblarRefs($('fu'));
+      $('fu').onsubmit = function (ev) { ev.preventDefault(); llamar('usuarios.crear', datosForm(this)).then(function (r) {
+        panel('Usuario creado', '<p>Contraseña temporal (se muestra una sola vez):</p><p class="font-mono text-lg bg-slate-100 dark:bg-slate-800 p-3 rounded my-3 select-all">' + esc(r.password_temporal) + '</p><p class="text-sm text-amber-700">' + esc(r.aviso) + '</p>');
+        vistaUsuarios(c); }).catch(function (e) { aviso(e.mensaje, 'error'); }); };
+    };
+    Array.prototype.forEach.call(c.querySelectorAll('[data-ed]'), function (b) { b.onclick = function () {
+      var u = porId[b.getAttribute('data-ed')];
+      panel('Editar ' + u.email, '<form id="fe" class="space-y-3">' + campoHtml('nombre', 'texto', 'Nombre', null, u.nombre) + campoHtml('rol', 'enum', 'Rol', ROLES_UI, u.rol) +
+        campoHtml('estado', 'enum', 'Estado', ['ACTIVO', 'INACTIVO'], u.estado) + campoHtml('proyectos_asignados', 'texto', 'Fideicomisos asignados', null, u.proyectos_asignados) +
+        campoHtml('motivo', 'texto', 'Motivo del cambio') + '<button class="boton-primario w-full">Guardar</button></form>');
+      $('fe').onsubmit = function (ev) { ev.preventDefault(); var d = datosForm(this); d.id = u.id; d.version = u.version;
+        llamar('usuarios.actualizar', d).then(function () { aviso('Usuario actualizado.', 'ok'); cerrarPanel(); vistaUsuarios(c); }).catch(function (e) { aviso(e.mensaje, 'error'); }); };
+    }; });
+    Array.prototype.forEach.call(c.querySelectorAll('[data-rs]'), function (b) { b.onclick = function () {
+      var motivo = prompt('Motivo del reseteo:'); if (!motivo) return;
+      llamar('usuarios.resetearPassword', { id: b.getAttribute('data-rs'), motivo: motivo }).then(function (r) {
+        panel('Contraseña temporal', '<p class="font-mono text-lg bg-slate-100 dark:bg-slate-800 p-3 rounded select-all">' + esc(r.password_temporal) + '</p><p class="text-sm mt-2">Comuníquela por un canal seguro.</p>'); })
+        .catch(function (e) { aviso(e.mensaje, 'error'); });
+    }; });
+  }).catch(function (e) { c.innerHTML = '<p class="text-red-600">' + esc(e.mensaje) + '</p>'; });
+}
+
+// ---------- Configuración ----------
+function vistaConfiguracion(c) {
+  llamar('configuracion.todas').then(function (r) {
+    var desc = {}; r.defectos.forEach(function (d) { desc[d.clave] = d.descripcion; });
+    c.innerHTML = '<div class="grid lg:grid-cols-3 gap-6"><div class="lg:col-span-2 tarjeta"><h3 class="font-semibold mb-4">Parámetros globales</h3><form id="fc" class="space-y-3">' +
+      Object.keys(r.valores).sort().map(function (k) {
+        var tipo = /^color_/.test(k) ? 'color' : 'text';
+        return '<label class="campo">' + esc(etiqueta(k)) + (desc[k] ? '<span class="text-xs font-normal text-slate-500">' + esc(desc[k]) + '</span>' : '') +
+          '<input type="' + tipo + '" name="' + esc(k) + '" value="' + esc(r.valores[k]) + '" data-original="' + esc(r.valores[k]) + '"></label>';
+      }).join('') + '<button class="boton-primario">Guardar cambios</button></form></div>' +
+      '<div class="space-y-6"><div class="tarjeta text-sm"><h3 class="font-semibold mb-2">Estado del sistema</h3><p>Versión ' + esc(r.version) + '</p><p>Cuota de email restante hoy: ' + esc(r.cuota_email_restante) + '</p><p class="mt-2">WhatsApp: ' + esc(r.whatsapp.mensaje) + '</p></div>' +
+      '<div class="tarjeta"><h3 class="font-semibold mb-3">Cambiar mi contraseña</h3><form id="fp" class="space-y-3">' + campoHtml('actual', 'password', 'Actual') + '<label class="campo">Nueva<input type="password" name="nueva" minlength="12" required></label><button class="boton-secundario w-full">Cambiar</button></form></div></div></div>';
+    $('fc').onsubmit = function (ev) {
+      ev.preventDefault();
+      var cambios = Array.prototype.filter.call(this.elements, function (el) { return el.name && el.value !== el.getAttribute('data-original'); });
+      if (!cambios.length) return aviso('No hay cambios.', 'info');
+      Promise.all(cambios.map(function (el) { return llamar('configuracion.guardar', { clave: el.name, valor: el.value }); }))
+        .then(function () { aviso('Configuración guardada. La web pública se actualiza al recargar.', 'ok'); vistaConfiguracion(c); }).catch(function (e) { aviso(e.mensaje, 'error'); });
+    };
+    $('fp').onsubmit = function (ev) { ev.preventDefault(); llamar('auth.cambiarPassword', datosForm(this)).then(function () { aviso('Contraseña actualizada.', 'ok'); }).catch(function (e) { aviso(e.mensaje, 'error'); }); };
+  }).catch(function (e) { c.innerHTML = '<p class="text-red-600">' + esc(e.mensaje) + '</p>'; });
+}
+
+// ---------- Portal del beneficiario ----------
+function vistaPortal(c) {
+  llamar('portal.resumen').then(function (r) {
+    var t = r.cuenta.totales, p = r.cuenta.proxima;
+    var html = '<div class="tarjeta"><p class="text-sm text-slate-500">Bienvenido/a</p><h3 class="text-xl font-semibold">' + esc(r.beneficiario.nombre) + '</h3><p class="text-sm mt-1">' +
+      esc(r.fideicomiso ? r.fideicomiso.denominacion : '') + (r.unidad ? ' · Unidad ' + esc(r.unidad.codigo) : '') + ' · Situación contractual: ' + esc(r.beneficiario.estado_contractual || '—') + '</p></div>' +
+      '<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">' + kpi('Total abonado', moneda(t.pagado)) + kpi('Saldo pendiente', moneda(t.saldo)) + kpi('Vencido', moneda(t.vencido)) +
+      kpi('Próximo vencimiento', p ? esc(fecha(p.vencimiento)) : '—', p ? 'Cuota ' + p.numero + ' · ' + moneda(p.saldo) : '') + '</div>';
+    html += '<div class="grid lg:grid-cols-2 gap-6"><div class="tarjeta"><h4 class="font-semibold mb-3">Avance de obra</h4>' + (r.obra.length ? r.obra.map(function (o) {
+      return '<p class="font-medium">' + esc(o.nombre) + '</p>' + barra(o.avance_fisico) + '<p class="text-xs text-slate-500 mb-3">' + esc(o.avance_fisico || 0) + '% certificado</p>' +
+        o.etapas.map(function (e) { return '<div class="grid grid-cols-[8rem_1fr_3rem] gap-2 items-center text-xs"><span class="truncate">' + esc(e.nombre) + '</span>' + barra(e.avance) + '<span>' + esc(e.avance || 0) + '%</span></div>'; }).join('');
+    }).join('') : '<p class="text-sm text-slate-500">La obra aún no inició.</p>') + '</div>' +
+      '<div class="tarjeta"><h4 class="font-semibold mb-3">Acciones</h4><div class="flex flex-wrap gap-2"><button class="boton-primario" id="pInformar">Informar un pago</button><button class="boton-secundario" id="pSolicitud">Nueva consulta</button><button class="boton-secundario" id="pCesion">Solicitar cesión o salida</button></div>' +
+      '<h4 class="font-semibold mt-6 mb-2">Comunicaciones</h4>' + (r.comunicaciones.length ? r.comunicaciones.slice(-5).reverse().map(function (n) { return '<div class="text-sm border-l-2 border-marca pl-3 mb-2"><p class="font-medium">' + esc(n.asunto) + '</p><p>' + esc(n.mensaje) + '</p><p class="text-xs text-slate-500">' + esc(fecha(n.fecha)) + '</p></div>'; }).join('') : '<p class="text-sm text-slate-500">Sin comunicaciones.</p>') + '</div></div>';
+    html += '<div class="tarjeta"><h4 class="font-semibold mb-3">Cuotas</h4>' + tablaSimple(r.cuenta.cuotas.map(function (q) { return { numero: q.numero, vencimiento: q.vencimiento, importe: q.importe, pagado: q.pagado, saldo: q.saldo, estado: q.estado }; })) + '</div>';
+    html += '<div class="tarjeta"><h4 class="font-semibold mb-3">Pagos</h4><div class="overflow-x-auto"><table class="tabla"><thead><tr><th>Fecha</th><th>Importe</th><th>Estado</th><th></th></tr></thead><tbody>' +
+      (r.cuenta.pagos.length ? r.cuenta.pagos.map(function (x) { return '<tr><td>' + esc(fecha(x.fecha)) + '</td><td>' + moneda(x.importe) + '</td><td>' + badge(x.estado) + (x.motivo_rechazo ? '<p class="text-xs">' + esc(x.motivo_rechazo) + '</p>' : '') + '</td><td>' + (x.estado === 'ACREDITADO' ? '<button class="boton-secundario" data-recibo="' + esc(x.id) + '">Recibo</button>' : '') + '</td></tr>'; }).join('') : '<tr><td colspan="4" class="text-slate-500">Sin pagos.</td></tr>') + '</tbody></table></div>' +
+      '<p class="text-xs text-slate-500 mt-2">Un pago informado se acredita cuando la administración lo verifica contra el extracto bancario.</p></div>';
+    html += '<div class="grid lg:grid-cols-2 gap-6"><div class="tarjeta"><h4 class="font-semibold mb-3">Documentos</h4>' + (r.documentos.length ? '<ul class="text-sm space-y-1">' + r.documentos.map(function (d) { var u = urlSegura(d.url); return '<li>' + (u ? '<a class="text-marca underline" target="_blank" rel="noopener" href="' + esc(u) + '">' + esc(d.titulo) + '</a>' : esc(d.titulo)) + ' <span class="text-xs text-slate-500">' + esc(d.tipo || '') + '</span></li>'; }).join('') + '</ul>' : '<p class="text-sm text-slate-500">Sin documentos habilitados.</p>') + '</div>' +
+      '<div class="tarjeta"><h4 class="font-semibold mb-3">Mis solicitudes</h4>' + tablaSimple(r.solicitudes.map(function (s) { return { asunto: s.asunto, estado: s.estado, fecha: s.fecha }; }).concat(r.cesiones.map(function (s) { return { asunto: humano(s.alternativa), estado: s.estado, fecha: s.fecha_solicitud }; }))) + '</div></div>';
+    c.innerHTML = html;
+    $('pInformar').onclick = function () { abrirAccion({ t: 'Informar un pago', a: 'portal.informarPago', idem: true, campos: [['importe', 'moneda', 'Importe (ARS)'], ['fecha', 'fecha', 'Fecha del pago'], ['medio', 'enum', 'Medio', ['TRANSFERENCIA', 'DEPOSITO', 'OTRO']], ['referencia_bancaria', 'texto', 'N° de operación / referencia']], mostrar: function (x) { setTimeout(function () { vistaPortal(c); }, 0); return '<p>' + esc(x.mensaje) + '</p>'; } }); };
+    $('pSolicitud').onclick = function () { abrirAccion({ t: 'Nueva consulta', a: 'portal.solicitud', idem: true, campos: [['asunto', 'texto', 'Asunto'], ['mensaje', 'textarea', 'Mensaje']], mostrar: function () { setTimeout(function () { vistaPortal(c); }, 0); return '<p>Consulta enviada.</p>'; } }); };
+    $('pCesion').onclick = function () {
+      panel('Solicitud de cesión o desvinculación', '<div class="nota mb-4">La solicitud inicia un análisis. No implica aprobación automática ni garantiza comprador, precio de salida ni reintegro. Las condiciones surgen de su contrato.</div><form id="fces" class="space-y-3">' +
+        campoHtml('alternativa', 'enum', 'Alternativa', ['CESION_DERECHOS', 'SUSTITUCION_BENEFICIARIO', 'RESOLUCION_CONTRACTUAL', 'REEMBOLSO', 'OTRA']) + campoHtml('motivo', 'textarea', 'Motivo') + '<button class="boton-primario w-full">Enviar solicitud</button></form>');
+      $('fces').onsubmit = function (ev) { ev.preventDefault(); llamar('portal.solicitarCesion', datosForm(this)).then(function () { aviso('Solicitud registrada.', 'ok'); cerrarPanel(); vistaPortal(c); }).catch(function (e) { aviso(e.mensaje, 'error'); }); };
+    };
+    Array.prototype.forEach.call(c.querySelectorAll('[data-recibo]'), function (b) { b.onclick = function () {
+      llamar('portal.recibo', { pago_id: b.getAttribute('data-recibo') }).then(function (x) { panel('Recibo', mostrarRecibo(x)); }).catch(function (e) { aviso(e.mensaje, 'error'); }); }; });
+  }).catch(function (e) { c.innerHTML = '<p class="text-red-600">' + esc(e.mensaje) + '</p>'; });
+}
+
+iniciar();
+</script>
