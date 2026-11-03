@@ -1,0 +1,16 @@
+{
+  "name": "plataforma-fiduciaria-integral",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma integral de desarrollo y administración de fideicomisos inmobiliarios (Google Apps Script + Google Sheets).",
+  "scripts": {
+    "test": "node --test tests/",
+    "build:css": "tailwindcss -c tailwind.config.js -i estilos/entrada.css -o salida/tailwind.css --minify && node tools/incrustar-css.js",
+    "verificar-secretos": "node tools/verificar-secretos.js",
+    "verificar": "npm run build:css && npm test && npm run verificar-secretos"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

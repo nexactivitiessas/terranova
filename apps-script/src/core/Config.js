@@ -1,0 +1,96 @@
+/**
+ * Config.js — Constantes globales de la plataforma.
+ * Compatible con Apps Script V8. Sin dependencias de otros archivos en tiempo de carga.
+ */
+var APP = Object.freeze({
+  NOMBRE_PROVISIONAL: 'PLATAFORMA FIDUCIARIA INTEGRAL',
+  VERSION: '0.1.0',
+  VERSION_ESQUEMA: 1,
+  ZONA_HORARIA: 'America/Argentina/Cordoba',
+  MONEDA: 'ARS',
+  LOCALE: 'es-AR',
+  // Seguridad
+  SESION_TTL_SEG: 6 * 60 * 60,           // máximo permitido por CacheService (6 h)
+  SESION_INACTIVIDAD_SEG: 60 * 60,       // expiración deslizante por inactividad
+  LOGIN_MAX_INTENTOS: 5,
+  LOGIN_BLOQUEO_MIN: 15,
+  HASH_ITERACIONES: 600,                 // iteraciones HMAC-SHA256 (balance costo/tiempo en Apps Script)
+  RESET_TTL_MIN: 30,
+  PASSWORD_MIN: 12,
+  // Datos
+  PAGINA_MAX: 200,
+  LOTE_MAX: 500,
+  // Cola de tareas
+  TAREA_MAX_INTENTOS: 5,
+  TAREA_LOTE: 20,
+  TIEMPO_MAX_EJECUCION_MS: 4.5 * 60 * 1000 // margen sobre el límite de 6 min
+});
+
+/** Claves de Script Properties (los VALORES nunca se guardan en el repositorio). */
+var PROP = Object.freeze({
+  SPREADSHEET_ID: 'SPREADSHEET_ID',
+  PEPPER: 'AUTH_PEPPER',
+  SETUP_CODE_HASH: 'SETUP_CODE_HASH',
+  BACKUP_FOLDER_ID: 'BACKUP_FOLDER_ID',
+  DRIVE_FOLDER_ID: 'DRIVE_FOLDER_ID',
+  WHATSAPP_TOKEN: 'WHATSAPP_TOKEN',
+  WHATSAPP_PHONE_ID: 'WHATSAPP_PHONE_ID',
+  WHATSAPP_VERIFY_TOKEN: 'WHATSAPP_VERIFY_TOKEN',
+  AUDIT_ULTIMO_HASH: 'AUDIT_ULTIMO_HASH'
+});
+
+var ROLES = Object.freeze({
+  SUPERADMIN: 'SUPERADMIN',
+  ADMINISTRADOR: 'ADMINISTRADOR',
+  ADMIN_PROYECTO: 'ADMINISTRADOR_PROYECTO',
+  CONTADOR: 'CONTADOR',
+  ASESOR_COMERCIAL: 'ASESOR_COMERCIAL',
+  ASESOR_JURIDICO: 'ASESOR_JURIDICO',
+  RESPONSABLE_OBRA: 'RESPONSABLE_OBRA',
+  ATENCION_BENEFICIARIO: 'ATENCION_BENEFICIARIO',
+  BENEFICIARIO: 'BENEFICIARIO',
+  VISITANTE: 'VISITANTE'
+});
+
+/** Roles cuyo alcance se limita a los proyectos asignados en USUARIOS.proyectos_asignados. */
+var ROLES_CON_ALCANCE_PROYECTO = ['ADMINISTRADOR_PROYECTO', 'RESPONSABLE_OBRA'];
+
+var ESTADOS = Object.freeze({
+  FIDEICOMISO: ['EN_EVALUACION', 'PREPARACION_PRELIMINAR', 'CONSTITUCION_JURIDICA', 'LANZAMIENTO',
+    'COMERCIALIZACION', 'EJECUCION', 'FINALIZACION', 'ADJUDICACION', 'LIQUIDACION', 'CERRADO'],
+  TERRENO: ['NUEVO_CONTACTO', 'CONTACTADO', 'DOCUMENTACION_PENDIENTE', 'EVALUACION_JURIDICA',
+    'EVALUACION_URBANISTICA', 'EVALUACION_ECONOMICA', 'NEGOCIACION', 'APROBADO', 'RECHAZADO',
+    'INCORPORADO_A_PROYECTO'],
+  EMBUDO: ['NUEVO_CONTACTO', 'PRIMER_CONTACTO', 'CALIFICACION', 'PRESENTACION_PROYECTO',
+    'ENVIO_INFORMACION', 'REUNION', 'PROPUESTA', 'EVALUACION_DOCUMENTAL', 'FORMALIZACION',
+    'INCORPORACION', 'SEGUIMIENTO', 'DESCARTADO'],
+  PAGO: ['PENDIENTE_VERIFICACION', 'ACREDITADO', 'RECHAZADO', 'ANULADO'],
+  CUOTA: ['PENDIENTE', 'PAGADA_PARCIAL', 'PAGADA', 'VENCIDA', 'ANULADA'],
+  CESION: ['INICIADA', 'EN_ANALISIS', 'DOCUMENTACION_PRELIMINAR', 'PENDIENTE_DECISION',
+    'APROBADA', 'RECHAZADA', 'FORMALIZADA', 'DESISTIDA'],
+  CONTENIDO: ['TEMA', 'INVESTIGACION', 'PLANIFICACION', 'GUION', 'REVISION_JURIDICA_COMERCIAL',
+    'GUION_APROBADO', 'AUDIO', 'IMAGENES', 'EDICION', 'SUBTITULOS', 'REVISION_TECNICA',
+    'PENDIENTE_APROBACION_FINAL', 'APROBADO', 'RECHAZADO', 'PUBLICADO'],
+  TAREA: ['PENDIENTE', 'EN_PROCESO', 'COMPLETADA', 'ERROR', 'REQUIERE_APROBACION'],
+  CERTIFICACION: ['BORRADOR', 'PRESENTADA', 'APROBADA', 'RECHAZADA'],
+  APORTE_PRELIMINAR: ['PENDIENTE_VERIFICACION', 'ACREDITADO', 'RECHAZADO', 'REINTEGRADO', 'ANULADO']
+});
+
+var TIPOS_MOVIMIENTO = ['APORTE_PRELIMINAR', 'APORTE_FIDUCIARIO', 'CUOTA_BENEFICIARIO',
+  'INGRESO_CESION', 'REINTEGRO', 'GASTO_PROYECTO', 'GASTO_PRELIMINAR', 'AJUSTE_COMPENSATORIO'];
+
+var CATEGORIAS_GASTO_PRELIMINAR = ['ESTUDIOS_FACTIBILIDAD', 'MENSURA', 'ANTEPROYECTOS', 'PLANOS',
+  'HONORARIOS_PROFESIONALES', 'ASESORAMIENTO_JURIDICO', 'TRAMITES_ADMINISTRATIVOS', 'PERMISOS',
+  'ESTUDIOS_TECNICOS', 'GASTOS_CONSTITUCION', 'CONTINGENCIAS_AUTORIZADAS'];
+
+/** Requisitos para habilitar un fideicomiso a COMERCIALIZACION (punto 24 del prompt maestro). */
+var REQUISITOS_COMERCIALIZACION = [
+  { campo: 'req_estructura_juridica_revisada', etiqueta: 'Estructura jurídica revisada' },
+  { campo: 'req_contrato_aprobado', etiqueta: 'Instrumento contractual aprobado' },
+  { campo: 'req_responsables_identificados', etiqueta: 'Identificación de los responsables' },
+  { campo: 'req_presupuesto_validado', etiqueta: 'Presupuesto validado' },
+  { campo: 'req_cronograma', etiqueta: 'Cronograma' },
+  { campo: 'req_reglas_aportes', etiqueta: 'Reglas de aportes' },
+  { campo: 'req_reglas_salida', etiqueta: 'Reglas de salida' },
+  { campo: 'req_publicidad_aprobada', etiqueta: 'Documentación publicitaria aprobada' }
+];
